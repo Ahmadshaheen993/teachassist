@@ -49,7 +49,8 @@
 - [x] إضافة ANTHROPIC_API_KEY كمتغير بيئة
 - [x] استكشاف هيكل Google Drive لمناهج قطر
 - [x] إنشاء مشروع teachassist على Google Cloud وتفعيل Drive API
-- [ ] إنشاء Service Account والحصول على مفتاح JSON
+- [x] إنشاء API Key على Google Cloud وتفعيل Drive API
+- [x] اختبار Google Drive API بنجاح (استكشاف مجلدات مناهج قطر)
 - [x] إنشاء وحدة server/googleDrive.ts للتكامل مع Drive API
 - [x] ربط وحدة Drive بالمنصة لتحميل المناهج والكتب
 - [ ] استبدال القالب الوزاري الحالي بالنموذج الرسمي المعتمد
