@@ -47,6 +47,9 @@
 - [x] اختبار الفهرسة الذكية على كتاب العلوم للثامن — نجاح كامل (وحدتان، 10 دروس، صفحات دقيقة)
 - [x] استخراج النص العربي من PDF سليم (pdftotext يعمل بشكل ممتاز)
 - [x] إنشاء scripts/seed.ts لبيانات قطر كاملة (دولة، 3 مراحل، 12 صفاً، 8 مواد، فصلان، كتاب العلوم الثامن مع وحدات ودروس)
+- [x] تفعيل Dependabot على مستودع GitHub (.github/dependabot.yml)
+- [x] إضافة rate limiting على مسارات التوليد والاسترداد (generate: 10/ساعة، worksheet: 10/ساعة، redeem: 3/ساعة، buyPlan: 5/ساعة، buySemester: 5/ساعة، indexPdf: 3/ساعة)
+- [x] كتابة مواصفة المصادقة المستقلة OTP كاملة (docs/AUTH_SPEC.md)
 - [ ] استبدال Manus OAuth بمصادقة مستقلة (بريد/جوال)
 - [x] الحصول على مفتاح Anthropic API
 - [x] تعديل server/_core/llm.ts لدعم Anthropic مباشرة مع fallback لـ Manus Forge

@@ -18,6 +18,7 @@ import {
 } from "./googleDrive";
 import { extractPdfText } from "./pdfExtract";
 import { createCheckout } from "./payments";
+import { checkRateLimit, RATE_LIMITS } from "./rateLimiter";
 
 // ==================== Plan Generation System Prompt ====================
 const PLAN_SYSTEM_PROMPT = `أنت خبير مناهج وطرائق تدريس متخصص في إعداد خطط الدروس اليومية وفق النماذج الوزارية الخليجية.
@@ -318,6 +319,8 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = ctx.user.id;
+        // Rate limit check
+        checkRateLimit(userId, RATE_LIMITS.generate);
         // Check eligibility
         const eligible = await db.canGenerate(userId);
         if (!eligible) {
@@ -402,6 +405,8 @@ ${JSON.stringify(PLAN_JSON_SCHEMA)}`;
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = ctx.user.id;
+        // Rate limit check
+        checkRateLimit(userId, RATE_LIMITS.worksheet);
         const plan = await db.getPlanById(input.planId, userId);
         if (!plan || plan.status !== "ready") {
           return { success: false, error: "الخطة غير موجودة أو غير جاهزة" };
@@ -539,6 +544,7 @@ ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
       .input(z.object({ gateway: z.enum(["myfatoorah", "tap"]) }))
       .mutation(async ({ ctx, input }) => {
         const userId = ctx.user.id;
+        checkRateLimit(userId, RATE_LIMITS.buySemester);
         const country = await db.getActiveCountries();
         const c = country[0];
         if (!c) return { success: false, error: "لا توجد دولة نشطة" };
@@ -575,6 +581,7 @@ ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
     redeem: protectedProcedure
       .input(z.object({ code: z.string().min(4).max(20) }))
       .mutation(async ({ ctx, input }) => {
+        checkRateLimit(ctx.user.id, RATE_LIMITS.redeem);
         return await db.redeemReferralCode(input.code.trim().toUpperCase(), ctx.user.id);
       }),
     redemptions: protectedProcedure
@@ -681,7 +688,8 @@ ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
         editionYear: z.number().optional(),
         maxPages: z.number().default(30),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        checkRateLimit(ctx.user.id, RATE_LIMITS.indexPdf);
         try {
           // 1. Download PDF from Drive
           const pdfBuffer = await downloadFile(input.fileId);
