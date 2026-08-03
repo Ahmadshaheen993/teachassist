@@ -49,7 +49,7 @@ vi.mock("./db", () => ({
   getPlanById: vi.fn().mockResolvedValue(undefined),
   getWorksheetsByUser: vi.fn().mockResolvedValue([]),
   createWorksheet: vi.fn().mockResolvedValue(1),
-  getSubscriptionStatus: vi.fn().mockResolvedValue({ active: false, credits: 5, subscription: null }),
+  getSubscriptionStatus: vi.fn().mockResolvedValue({ active: false, credits: 2, subscription: null }),
   getPurchasesByUser: vi.fn().mockResolvedValue([]),
   createPurchase: vi.fn().mockResolvedValue(1),
   updatePurchaseStatus: vi.fn().mockResolvedValue(undefined),
@@ -61,6 +61,17 @@ vi.mock("./db", () => ({
   createReferralCode: vi.fn().mockResolvedValue(undefined),
   getRedemptionsByCode: vi.fn().mockResolvedValue([]),
   getRewardsByCode: vi.fn().mockResolvedValue([]),
+  redeemReferralCode: vi.fn().mockResolvedValue({ success: true }),
+  getReferralCodeById: vi.fn().mockResolvedValue(undefined),
+  getRedemptionByUser: vi.fn().mockResolvedValue(undefined),
+  linkRedemptionToPurchase: vi.fn().mockResolvedValue(undefined),
+  countPaidSemesterRedemptions: vi.fn().mockResolvedValue(0),
+  getRewardByCode: vi.fn().mockResolvedValue(undefined),
+  createReferralReward: vi.fn().mockResolvedValue(undefined),
+  getUserById: vi.fn().mockResolvedValue({ id: 1, name: "Test Teacher", email: "test@example.com" }),
+  getPurchaseById: vi.fn().mockResolvedValue(undefined),
+  getCurrentTermForCountry: vi.fn().mockResolvedValue(undefined),
+  createSubscription: vi.fn().mockResolvedValue(1),
   getResources: vi.fn().mockResolvedValue([]),
   getAllCountries: vi.fn().mockResolvedValue([]),
   createCountry: vi.fn().mockResolvedValue(undefined),
@@ -74,6 +85,12 @@ vi.mock("./db", () => ({
   verifySchool: vi.fn().mockResolvedValue(undefined),
   getUnverifiedSchools: vi.fn().mockResolvedValue([]),
   updateUserProfile: vi.fn().mockResolvedValue(undefined),
+}));
+
+// Mock payments
+vi.mock("./payments", () => ({
+  createCheckout: vi.fn().mockResolvedValue({ success: true, paymentUrl: "https://pay.example.com/checkout" }),
+  paymentWebhooks: vi.fn(),
 }));
 
 // Mock LLM
@@ -187,23 +204,23 @@ describe("Subscription Router", () => {
     const caller = appRouter.createCaller(ctx);
     const result = await caller.subscription.status();
     expect(result.active).toBe(false);
-    expect(result.credits).toBe(5);
+    expect(result.credits).toBe(2);
   });
 
-  it("creates a single plan purchase", async () => {
+  it("creates a single plan purchase with checkout URL", async () => {
     const ctx = createAuthContext();
     const caller = appRouter.createCaller(ctx);
     const result = await caller.subscription.buyPlan({ gateway: "myfatoorah" });
     expect(result.success).toBe(true);
-    expect(result.gateway).toBe("myfatoorah");
+    expect(result.paymentUrl).toContain("checkout");
   });
 
-  it("creates a semester purchase", async () => {
+  it("creates a semester purchase with checkout URL", async () => {
     const ctx = createAuthContext();
     const caller = appRouter.createCaller(ctx);
-    const result = await caller.subscription.buySemester({ gateway: "tap", termId: 1 });
+    const result = await caller.subscription.buySemester({ gateway: "tap" });
     expect(result.success).toBe(true);
-    expect(result.gateway).toBe("tap");
+    expect(result.paymentUrl).toContain("checkout");
   });
 });
 
@@ -214,6 +231,13 @@ describe("Referral Router", () => {
     const result = await caller.referral.createCode();
     expect(result.success).toBe(true);
     expect(result.code).toHaveLength(8);
+  });
+
+  it("redeems a referral code", async () => {
+    const ctx = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.referral.redeem({ code: "TESTCODE" });
+    expect(result.success).toBe(true);
   });
 });
 

@@ -85,7 +85,7 @@ export default function DashboardLayout({
             </p>
             <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 text-primary text-sm font-medium">
               <Gift className="w-4 h-4" />
-              5 خطط مجانية عند التسجيل
+              خطتان مجانيتان عند التسجيل
             </div>
           </div>
           <Button

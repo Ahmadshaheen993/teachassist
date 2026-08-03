@@ -55,8 +55,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     if (isNewUser) {
       const insertedUser = await db.select().from(users).where(eq(users.openId, user.openId)).limit(1);
       if (insertedUser.length > 0) {
-        await addCredits(insertedUser[0].id, 5);
-        console.log(`[Database] Granted 5 free plans to new user: ${user.openId}`);
+    await addCredits(insertedUser[0].id, 2);
+    console.log(`[Database] Granted 2 free plans to new user: ${user.openId}`);
       }
     }
   } catch (error) { console.error("[Database] Failed to upsert user:", error); throw error; }
@@ -392,4 +392,140 @@ export async function verifySchool(id: number) {
 export async function getUnverifiedSchools() {
   const db = await getDb(); if (!db) return [];
   return db.select().from(schools).where(eq(schools.isVerified, false));
+}
+
+// ============================================================
+// إضافات db-additions.ts — دوال جديدة للدفع والإحالات
+// ============================================================
+
+// ==================== Users ====================
+
+export async function getUserById(id: number) {
+  const db = await getDb(); if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return result[0];
+}
+
+// ==================== Purchases ====================
+
+export async function getPurchaseById(id: number) {
+  const db = await getDb(); if (!db) return undefined;
+  const result = await db.select().from(purchases).where(eq(purchases.id, id)).limit(1);
+  return result[0];
+}
+
+// ==================== Terms ====================
+
+// الفصل الحالي لدولة ما، وإن لم يوجد فأقرب فصل قادم
+export async function getCurrentTermForCountry(countryId: number) {
+  const db = await getDb(); if (!db) return undefined;
+  const today = new Date().toISOString().slice(0, 10);
+  const current = await db.select().from(terms).where(
+    and(eq(terms.countryId, countryId), lte(terms.startDate, today as any), gte(terms.endDate, today as any))
+  ).limit(1);
+  if (current.length > 0) return current[0];
+  const upcoming = await db.select().from(terms).where(
+    and(eq(terms.countryId, countryId), gte(terms.startDate, today as any))
+  ).orderBy(terms.startDate).limit(1);
+  return upcoming[0];
+}
+
+// ==================== Subscriptions ====================
+
+// إنشاء اشتراك — آمن ضد التكرار: اشتراك واحد لكل (مستخدم، فصل)
+export async function createSubscription(data: {
+  userId: number;
+  termId: number;
+  source: "paid" | "referral_reward" | "admin_grant";
+  purchaseId?: number;
+  startsAt: any;
+  endsAt: any;
+}): Promise<number | undefined> {
+  const db = await getDb(); if (!db) return undefined;
+  const existing = await db.select().from(subscriptions).where(
+    and(eq(subscriptions.userId, data.userId), eq(subscriptions.termId, data.termId))
+  ).limit(1);
+  if (existing.length > 0) return existing[0].id;
+  const result = await db.insert(subscriptions).values({
+    userId: data.userId,
+    termId: data.termId,
+    source: data.source,
+    purchaseId: data.purchaseId,
+    startsAt: data.startsAt,
+    endsAt: data.endsAt,
+  });
+  return result[0]?.insertId;
+}
+
+// ==================== Referrals: الاسترداد والمكافآت ====================
+
+// استرداد كود إحالة — يُستدعى مرة واحدة للمستخدم الجديد
+export async function redeemReferralCode(code: string, userId: number):
+  Promise<{ success: boolean; error?: string }> {
+  const db = await getDb(); if (!db) return { success: false, error: "قاعدة البيانات غير متاحة" };
+
+  const found = await db.select().from(referralCodes).where(eq(referralCodes.code, code)).limit(1);
+  const rc = found[0];
+  if (!rc || !rc.isActive) return { success: false, error: "الكود غير صالح" };
+  if (rc.ownerUserId === userId) return { success: false, error: "لا يمكنك استخدام كودك الخاص" };
+
+  // مستخدم واحد = استرداد واحد فقط (لأي كود)
+  const prior = await db.select().from(referralRedemptions)
+    .where(eq(referralRedemptions.redeemedBy, userId)).limit(1);
+  if (prior.length > 0) return { success: false, error: "سبق أن استخدمت كود إحالة" };
+
+  // احترام حد الاستخدامات
+  const uses = await db.select({ c: sql<number>`count(*)` }).from(referralRedemptions)
+    .where(eq(referralRedemptions.codeId, rc.id));
+  if ((uses[0]?.c ?? 0) >= rc.maxUses) return { success: false, error: "اكتمل عدد استخدامات هذا الكود" };
+
+  await db.insert(referralRedemptions).values({ codeId: rc.id, redeemedBy: userId });
+  return { success: true };
+}
+
+export async function getRedemptionByUser(userId: number) {
+  const db = await getDb(); if (!db) return undefined;
+  const result = await db.select().from(referralRedemptions)
+    .where(eq(referralRedemptions.redeemedBy, userId)).limit(1);
+  return result[0];
+}
+
+export async function getReferralCodeById(id: number) {
+  const db = await getDb(); if (!db) return undefined;
+  const result = await db.select().from(referralCodes).where(eq(referralCodes.id, id)).limit(1);
+  return result[0];
+}
+
+// ربط استرداد المستخدم بأول شراء فصلي مدفوع له (يُستدعى من activatePurchase)
+export async function linkRedemptionToPurchase(userId: number, purchaseId: number): Promise<void> {
+  const db = await getDb(); if (!db) return;
+  await db.update(referralRedemptions)
+    .set({ purchaseId })
+    .where(and(eq(referralRedemptions.redeemedBy, userId), isNull(referralRedemptions.purchaseId)));
+}
+
+// عدد الاشتراكات الفصلية "المدفوعة" عبر كود معيّن
+export async function countPaidSemesterRedemptions(codeId: number): Promise<number> {
+  const db = await getDb(); if (!db) return 0;
+  const result = await db.select({ c: sql<number>`count(*)` })
+    .from(referralRedemptions)
+    .innerJoin(purchases, eq(purchases.id, referralRedemptions.purchaseId))
+    .where(and(
+      eq(referralRedemptions.codeId, codeId),
+      eq(purchases.status, "paid"),
+      eq(purchases.kind, "semester"),
+    ));
+  return result[0]?.c ?? 0;
+}
+
+export async function getRewardByCode(codeId: number) {
+  const db = await getDb(); if (!db) return undefined;
+  const result = await db.select().from(referralRewards)
+    .where(eq(referralRewards.codeId, codeId)).limit(1);
+  return result[0];
+}
+
+export async function createReferralReward(codeId: number, subscriptionId: number): Promise<void> {
+  const db = await getDb(); if (!db) return;
+  await db.insert(referralRewards).values({ codeId, subscriptionId });
 }

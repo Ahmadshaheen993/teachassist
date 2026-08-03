@@ -15,6 +15,7 @@ import {
   getFileDownloadUrl,
   downloadFile,
 } from "./googleDrive";
+import { createCheckout } from "./payments";
 
 // ==================== Plan Generation System Prompt ====================
 const PLAN_SYSTEM_PROMPT = `أنت خبير مناهج وطرائق تدريس متخصص في إعداد خطط الدروس اليومية وفق النماذج الوزارية الخليجية.
@@ -518,10 +519,20 @@ ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
           amount: c.pricePerPlan, currency: c.currencyCode,
           gateway: input.gateway, status: "pending",
         });
-        return { success: true, purchaseId, amount: c.pricePerPlan, currency: c.currencyCode, gateway: input.gateway };
+        const checkout = await createCheckout({
+          gateway: input.gateway,
+          purchaseId: purchaseId!,
+          amount: c.pricePerPlan,
+          currency: c.currencyCode,
+          customerName: ctx.user.fullName || ctx.user.name || "Teacher",
+          customerEmail: ctx.user.email,
+          description: "خطة درس واحدة — مساعد المعلم",
+        });
+        if (!checkout.success) return { success: false, error: checkout.error };
+        return { success: true, purchaseId, paymentUrl: checkout.paymentUrl };
       }),
     buySemester: protectedProcedure
-      .input(z.object({ gateway: z.enum(["myfatoorah", "tap"]), termId: z.number() }))
+      .input(z.object({ gateway: z.enum(["myfatoorah", "tap"]) }))
       .mutation(async ({ ctx, input }) => {
         const userId = ctx.user.id;
         const country = await db.getActiveCountries();
@@ -532,20 +543,19 @@ ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
           amount: c.pricePerSemester, currency: c.currencyCode,
           gateway: input.gateway, status: "pending",
         });
-        return { success: true, purchaseId, amount: c.pricePerSemester, currency: c.currencyCode, gateway: input.gateway };
+        const checkout = await createCheckout({
+          gateway: input.gateway,
+          purchaseId: purchaseId!,
+          amount: c.pricePerSemester,
+          currency: c.currencyCode,
+          customerName: ctx.user.fullName || ctx.user.name || "Teacher",
+          customerEmail: ctx.user.email,
+          description: "اشتراك فصل دراسي — مساعد المعلم",
+        });
+        if (!checkout.success) return { success: false, error: checkout.error };
+        return { success: true, purchaseId, paymentUrl: checkout.paymentUrl };
       }),
-    confirmPayment: protectedProcedure
-      .input(z.object({ purchaseId: z.number(), gatewayRef: z.string() }))
-      .mutation(async ({ ctx, input }) => {
-        await db.updatePurchaseStatus(input.purchaseId, "paid", input.gatewayRef);
-        // Add credits or subscription based on purchase kind
-        const purchases = await db.getPurchasesByUser(ctx.user.id);
-        const purchase = purchases.find(p => p.id === input.purchaseId);
-        if (purchase?.kind === "single_plan") {
-          await db.addCredits(ctx.user.id, 1);
-        }
-        return { success: true };
-      }),
+
   }),
 
   // ==================== Referrals ====================
@@ -558,14 +568,23 @@ ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
       await db.createReferralCode(ctx.user.id, code);
       return { success: true, code };
     }),
+    redeem: protectedProcedure
+      .input(z.object({ code: z.string().min(4).max(20) }))
+      .mutation(async ({ ctx, input }) => {
+        return await db.redeemReferralCode(input.code.trim().toUpperCase(), ctx.user.id);
+      }),
     redemptions: protectedProcedure
       .input(z.object({ codeId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        const code = await db.getReferralCodeById(input.codeId);
+        if (!code || code.ownerUserId !== ctx.user.id) return [];
         return await db.getRedemptionsByCode(input.codeId);
       }),
     rewards: protectedProcedure
       .input(z.object({ codeId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        const code = await db.getReferralCodeById(input.codeId);
+        if (!code || code.ownerUserId !== ctx.user.id) return [];
         return await db.getRewardsByCode(input.codeId);
       }),
   }),

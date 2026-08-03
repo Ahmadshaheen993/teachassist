@@ -55,3 +55,11 @@
 - [x] ربط وحدة Drive بالمنصة لتحميل المناهج والكتب
 - [ ] استبدال القالب الوزاري الحالي بالنموذج الرسمي المعتمد
 - [ ] مطابقة بيانات المنهج (كيمياء الثامن) مع الكتاب الرسمي يدوياً
+
+## إصلاحات FIXES.md
+- [x] خطوة 1: تقليل الخطط المجانية من 5 إلى 2 + إضافة دوال db-additions.ts
+- [x] خطوة 2: حذف ثغرة confirmPayment من routers.ts
+- [x] خطوة 3: تعديل buyPlan/buySemester مع createCheckout + إصلاح الإحالات
+- [x] خطوة 4: نسخ payments.ts وربط Webhooks في index.ts
+- [x] خطوة 5: تحديث الواجهة (DashboardLayout, Home, Subscription, Referrals)
+- [x] خطوة 6: تحديث الاختبارات (18/18 ناجحة)

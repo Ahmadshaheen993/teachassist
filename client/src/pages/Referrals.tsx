@@ -2,14 +2,24 @@ import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Gift, Plus, Copy, Users, Award, CheckCircle2 } from "lucide-react";
+import { Gift, Plus, Copy, Users, Award, CheckCircle2, Ticket } from "lucide-react";
 import { toast } from "sonner";
+import { useState } from "react";
+import { Input } from "@/components/ui/input";
 
 export default function Referrals() {
   const { data: codes, refetch } = trpc.referral.codes.useQuery();
+  const [redeemCode, setRedeemCode] = useState("");
   const createMutation = trpc.referral.createCode.useMutation({
     onSuccess: (data) => { toast.success(`تم إنشاء كود: ${data.code}`); refetch(); },
     onError: () => toast.error("فشل إنشاء الكود"),
+  });
+  const redeemMutation = trpc.referral.redeem.useMutation({
+    onSuccess: (data) => {
+      if (data.success) { toast.success("تم استرداد الكود بنجاح!"); setRedeemCode(""); }
+      else { toast.error(data.error || "فشل الاسترداد"); }
+    },
+    onError: () => toast.error("فشل الاسترداد"),
   });
 
   const copyToClipboard = (code: string) => {
@@ -28,6 +38,33 @@ export default function Referrals() {
           <Plus className="ml-2 h-4 w-4" /> إنشاء كود جديد
         </Button>
       </div>
+
+      {/* Redeem a code */}
+      <Card className="border-primary/20">
+        <CardContent className="p-5">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex-1">
+              <label className="text-sm font-medium mb-1.5 block">لديك كود إحالة؟</label>
+              <Input
+                placeholder="أدخل كود الإحالة هنا"
+                value={redeemCode}
+                onChange={(e) => setRedeemCode(e.target.value)}
+                className="font-mono"
+              />
+            </div>
+            <div className="flex items-end">
+              <Button
+                onClick={() => redeemMutation.mutate({ code: redeemCode })}
+                disabled={!redeemCode.trim() || redeemMutation.isPending}
+                className="w-full sm:w-auto"
+              >
+                <Ticket className="ml-2 h-4 w-4" />
+                استرداد الكود
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* How it works */}
       <Card className="bg-gradient-to-l from-primary/5 to-accent/10">

@@ -13,8 +13,9 @@ export default function Subscription() {
 
   const buyPlanMutation = trpc.subscription.buyPlan.useMutation({
     onSuccess: (data) => {
-      if (data.success) {
-        toast.success(`تم إنشاء طلب شراء خطة واحدة — المبلغ: ${data.amount} ${data.currency} عبر ${data.gateway}`);
+      if (data.success && data.paymentUrl) {
+        toast.success("جارٍ تحويلك إلى صفحة الدفع...");
+        window.location.href = data.paymentUrl;
       } else {
         toast.error(data.error || "فشل إنشاء الطلب");
       }
@@ -23,8 +24,9 @@ export default function Subscription() {
 
   const buySemesterMutation = trpc.subscription.buySemester.useMutation({
     onSuccess: (data) => {
-      if (data.success) {
-        toast.success(`تم إنشاء طلب اشتراك فصلي — المبلغ: ${data.amount} ${data.currency} عبر ${data.gateway}`);
+      if (data.success && data.paymentUrl) {
+        toast.success("جارٍ تحويلك إلى صفحة الدفع...");
+        window.location.href = data.paymentUrl;
       } else {
         toast.error(data.error || "فشل إنشاء الطلب");
       }
@@ -130,10 +132,10 @@ export default function Subscription() {
               <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-green-600" /> أولوية في التوليد</li>
             </ul>
             <div className="flex gap-2">
-              <Button onClick={() => buySemesterMutation.mutate({ gateway: "myfatoorah", termId: 1 })} disabled={buySemesterMutation.isPending} className="flex-1">
+              <Button onClick={() => buySemesterMutation.mutate({ gateway: "myfatoorah" })} disabled={buySemesterMutation.isPending} className="flex-1">
                 MyFatoorah
               </Button>
-              <Button onClick={() => buySemesterMutation.mutate({ gateway: "tap", termId: 1 })} disabled={buySemesterMutation.isPending} className="flex-1">
+              <Button onClick={() => buySemesterMutation.mutate({ gateway: "tap" })} disabled={buySemesterMutation.isPending} className="flex-1">
                 Tap
               </Button>
             </div>
