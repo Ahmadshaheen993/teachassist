@@ -122,6 +122,73 @@ const WORKSHEET_JSON_SCHEMA = {
   required: ["title", "instructions", "questions", "answer_key"],
 };
 
+// ==================== Plan HTML Generator for PDF Export ====================
+function generatePlanHtml(plan: any): string {
+  const obj = plan.objectives || {};
+  const proc = plan.procedures || [];
+  const assess = plan.assessment || {};
+  const diff = plan.differentiation || {};
+  return `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<style>
+  body { font-family: 'Tajawal', 'Noto Sans Arabic', sans-serif; padding: 40px; color: #1a1a1a; }
+  h1 { text-align: center; color: #0d6b56; font-size: 22px; margin-bottom: 24px; }
+  h2 { color: #0d6b56; font-size: 16px; border-bottom: 2px solid #0d6b56; padding-bottom: 4px; margin-top: 20px; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+  td, th { border: 1px solid #ddd; padding: 8px; font-size: 13px; text-align: right; }
+  th { background: #f0f9f6; }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .info-item { background: #f0f9f6; padding: 8px; border-radius: 6px; }
+  .info-label { font-size: 11px; color: #666; }
+  .info-value { font-size: 13px; font-weight: bold; }
+  ul { padding-right: 20px; }
+  li { margin-bottom: 4px; font-size: 13px; }
+  .section { margin-bottom: 16px; }
+  .badge { display: inline-block; background: #e8f5f0; padding: 2px 10px; border-radius: 12px; font-size: 12px; margin: 2px; }
+</style>
+</head>
+<body>
+  <h1>خطة درس يومية</h1>
+  <div class="info-grid">
+    <div class="info-item"><div class="info-label">المادة</div><div class="info-value">${plan.basic_info?.subject || ''}</div></div>
+    <div class="info-item"><div class="info-label">الصف</div><div class="info-value">${plan.basic_info?.grade || ''}</div></div>
+    <div class="info-item"><div class="info-label">الوحدة</div><div class="info-value">${plan.basic_info?.unit || ''}</div></div>
+    <div class="info-item"><div class="info-label">الدرس</div><div class="info-value">${plan.basic_info?.lesson || ''}</div></div>
+    <div class="info-item"><div class="info-label">التاريخ</div><div class="info-value">${plan.basic_info?.date || ''}</div></div>
+    <div class="info-item"><div class="info-label">عدد الحصص</div><div class="info-value">${plan.basic_info?.periods || 1}</div></div>
+    <div class="info-item"><div class="info-label">الصفحات</div><div class="info-value">${plan.basic_info?.pages || ''}</div></div>
+  </div>
+  <h2>الأهداف التعليمية</h2>
+  <div class="section">
+    <p><strong>المعرفية:</strong></p><ul>${(obj.cognitive||[]).map((o:string)=>`<li>${o}</li>`).join('')}</ul>
+    <p><strong>المهارية:</strong></p><ul>${(obj.skills||[]).map((o:string)=>`<li>${o}</li>`).join('')}</ul>
+    <p><strong>الوجدانية:</strong></p><ul>${(obj.affective||[]).map((o:string)=>`<li>${o}</li>`).join('')}</ul>
+  </div>
+  <h2>التهيئة</h2><p>${plan.warm_up || ''}</p>
+  <h2>الاستراتيجيات والوسائل</h2>
+  <p><strong>الاستراتيجيات:</strong> ${(plan.strategies||[]).map((s:string)=>`<span class="badge">${s}</span>`).join('')}</p>
+  <p><strong>الوسائل:</strong> ${(plan.materials||[]).map((m:string)=>`<span class="badge">${m}</span>`).join('')}</p>
+  <h2>خطوات التنفيذ</h2>
+  <table><tr><th>الخطوة</th><th>الزمن</th><th>دور المعلم</th><th>دور الطالب</th></tr>
+  ${proc.map((p:any)=>`<tr><td>${p.step}</td><td>${p.time_minutes} دقيقة</td><td>${p.teacher_role}</td><td>${p.student_role}</td></tr>`).join('')}
+  </table>
+  <h2>التقويم</h2>
+  <p><strong>القبلي:</strong> ${assess.diagnostic || ''}</p>
+  <p><strong>البنائي:</strong></p><ul>${(assess.formative||[]).map((q:string)=>`<li>${q}</li>`).join('')}</ul>
+  <p><strong>الختامي:</strong></p><ul>${(assess.summative||[]).map((q:string)=>`<li>${q}</li>`).join('')}</ul>
+  <h2>القيم التربوية</h2><p>${(plan.values||[]).map((v:string)=>`<span class="badge">${v}</span>`).join('')}</p>
+  <h2>الدمج التكنولوجي</h2><p>${plan.tech_integration || ''}</p>
+  <h2>مراعاة الفروق الفردية</h2>
+  <p><strong>دعم المتعثرين:</strong> ${diff.support || ''}</p>
+  <p><strong>إثراء المتفوقين:</strong> ${diff.enrichment || ''}</p>
+  <h2>الواجب المنزلي</h2><p>${plan.homework || ''}</p>
+  <h2>الربط بالحياة</h2><p>${plan.real_life_connection || ''}</p>
+</body>
+</html>`;
+}
+
 export const appRouter = router({
   system: systemRouter,
 
@@ -369,6 +436,17 @@ ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
     worksheets: protectedProcedure.query(async ({ ctx }) => {
       return await db.getWorksheetsByUser(ctx.user.id);
     }),
+    exportPdf: protectedProcedure
+      .input(z.object({ planId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const plan = await db.getPlanById(input.planId, ctx.user.id);
+        if (!plan || plan.status !== "ready") {
+          return { success: false, error: "الخطة غير جاهزة" };
+        }
+        const content = plan.content as any;
+        const html = generatePlanHtml(content);
+        return { success: true, html };
+      }),
   }),
 
   // ==================== Subscription & Credits ====================
