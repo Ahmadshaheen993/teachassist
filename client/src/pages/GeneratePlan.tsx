@@ -52,14 +52,26 @@ export default function GeneratePlan() {
     onError: (err) => { setIsGenerating(false); toast.error(`خطأ: ${err.message}`); },
   });
 
-  const exportPdfMutation = trpc.plans.exportPdf.useMutation({
-    onSuccess: (data) => {
-      if (data.success && data.html) {
-        const printWindow = window.open("", "_blank");
-        if (printWindow) {
-          printWindow.document.write(data.html);
-          printWindow.document.close();
-          setTimeout(() => { printWindow.print(); }, 500);
+  const exportPdfMutation = trpc.plans.exportRealPdf.useMutation({
+    onSuccess: (data: any) => {
+      if (data.success) {
+        if (data.url) {
+          // Real PDF from server — download it
+          const a = document.createElement("a");
+          a.href = data.url;
+          a.download = `خطة_درس.pdf`;
+          a.target = "_blank";
+          a.click();
+          toast.success("تم تصدير ملف PDF");
+        } else if (data.html) {
+          // Fallback: HTML print
+          const printWindow = window.open("", "_blank");
+          if (printWindow) {
+            printWindow.document.write(data.html);
+            printWindow.document.close();
+            setTimeout(() => { printWindow.print(); }, 500);
+          }
+          toast.info("تم استخدام التصدير البديل (طباعة المتصفح)");
         }
       } else {
         toast.error(data.error || "فشل التصدير");
@@ -67,27 +79,24 @@ export default function GeneratePlan() {
     },
   });
 
+  const exportDocxMutation = trpc.plans.exportDocx.useMutation({
+    onSuccess: (data: any) => {
+      if (data.success && data.url) {
+        const a = document.createElement("a");
+        a.href = data.url;
+        a.download = `خطة_درس.docx`;
+        a.target = "_blank";
+        a.click();
+        toast.success("تم تصدير ملف Word");
+      } else {
+        toast.error(data.error || "فشل تصدير Word");
+      }
+    },
+  });
+
   const exportWord = () => {
     if (!generatedPlan) return;
-    const plan = generatedPlan;
-    const html = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"></head><body>` +
-      `<h1>خطة درس: ${plan.basic_info?.lesson || ""}</h1>` +
-      `<p>المادة: ${plan.basic_info?.subject || ""} — الصف: ${plan.basic_info?.grade || ""} — الوحدة: ${plan.basic_info?.unit || ""}</p>` +
-      `<h2>الأهداف</h2><ul>` +
-      [...(plan.objectives?.cognitive || []), ...(plan.objectives?.skills || []), ...(plan.objectives?.affective || [])].map((o: string) => `<li>${o}</li>`).join("") +
-      `</ul><h2>خطوات التنفيذ</h2><table border="1"><tr><th>الخطوة</th><th>الزمن</th><th>المعلم</th><th>الطالب</th></tr>` +
-      (plan.procedures || []).map((p: any) => `<tr><td>${p.step}</td><td>${p.time_minutes} دقيقة</td><td>${p.teacher_role}</td><td>${p.student_role}</td></tr>`).join("") +
-      `</table><h2>التقويم</h2><p>القبلي: ${plan.assessment?.diagnostic || ""}</p><p>البنائي: ${(plan.assessment?.formative || []).join("، ")}</p><p>الختامي: ${(plan.assessment?.summative || []).join("، ")}</p>` +
-      `<h2>الواجب</h2><p>${plan.homework || ""}</p>` +
-      `</body></html>`;
-    const blob = new Blob([html], { type: "application/vnd.ms-word" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `خطة_درس_${plan.basic_info?.lesson || ""}.doc`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("تم تصدير ملف Word");
+    exportDocxMutation.mutate({ planId: (generateMutation.data as any)?.planId ?? 0 });
   };
 
   const worksheetMutation = trpc.plans.worksheet.useMutation({
@@ -248,7 +257,7 @@ export default function GeneratePlan() {
 
       {/* Generated Plan Display */}
       {generatedPlan && (
-        <PlanDisplay plan={generatedPlan} isGeneratingWorksheet={isGeneratingWorksheet} worksheet={worksheet} onGenerateWorksheet={handleGenerateWorksheet} onExportPdf={(planId) => exportPdfMutation.mutate({ planId })} exportPdfPending={exportPdfMutation.isPending} onExportWord={exportWord} planId={(generateMutation.data as any)?.planId ?? 0} />
+        <PlanDisplay plan={generatedPlan} isGeneratingWorksheet={isGeneratingWorksheet} worksheet={worksheet} onGenerateWorksheet={handleGenerateWorksheet} onExportPdf={(planId) => exportPdfMutation.mutate({ planId })} exportPdfPending={exportPdfMutation.isPending} onExportWord={exportWord} exportDocxPending={exportDocxMutation.isPending} planId={(generateMutation.data as any)?.planId ?? 0} />
       )}
     </div>
   );
@@ -263,7 +272,7 @@ export default function GeneratePlan() {
   }
 }
 
-function PlanDisplay({ plan, isGeneratingWorksheet, worksheet, onGenerateWorksheet, onExportPdf, exportPdfPending, onExportWord, planId }: { plan: any; isGeneratingWorksheet: boolean; worksheet: any; onGenerateWorksheet: () => void; onExportPdf: (planId: number) => void; exportPdfPending: boolean; onExportWord: () => void; planId: number; }) {
+function PlanDisplay({ plan, isGeneratingWorksheet, worksheet, onGenerateWorksheet, onExportPdf, exportPdfPending, onExportWord, exportDocxPending, planId }: { plan: any; isGeneratingWorksheet: boolean; worksheet: any; onGenerateWorksheet: () => void; onExportPdf: (planId: number) => void; exportPdfPending: boolean; onExportWord: () => void; exportDocxPending: boolean; planId: number; }) {
   return (
     <Card className="overflow-hidden">
       <CardHeader className="bg-primary/5">
@@ -279,8 +288,8 @@ function PlanDisplay({ plan, isGeneratingWorksheet, worksheet, onGenerateWorkshe
             <Button variant="outline" size="sm" onClick={() => onExportPdf(planId)} disabled={exportPdfPending}>
               <Download className="ml-2 h-4 w-4" /> {exportPdfPending ? "جاري..." : " PDF"}
             </Button>
-            <Button variant="outline" size="sm" onClick={onExportWord}>
-              <Download className="ml-2 h-4 w-4" /> Word
+            <Button variant="outline" size="sm" onClick={onExportWord} disabled={exportDocxPending}>
+              <Download className="ml-2 h-4 w-4" /> {exportDocxPending ? "جاري..." : " Word"}
             </Button>
           </div>
         </div>

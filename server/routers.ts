@@ -6,6 +6,7 @@ import { invokeLLM } from "./_core/llm";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import * as db from "./db";
+import { generateDocx, generatePdfFromDocx } from "./exportDoc";
 
 // ==================== Plan Generation System Prompt ====================
 const PLAN_SYSTEM_PROMPT = `أنت خبير مناهج وطرائق تدريس متخصص في إعداد خطط الدروس اليومية وفق النماذج الوزارية الخليجية.
@@ -446,6 +447,46 @@ ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
         const content = plan.content as any;
         const html = generatePlanHtml(content);
         return { success: true, html };
+      }),
+    exportDocx: protectedProcedure
+      .input(z.object({ planId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const plan = await db.getPlanById(input.planId, ctx.user.id);
+        if (!plan || plan.status !== "ready") {
+          return { success: false, error: "الخطة غير جاهزة" };
+        }
+        try {
+          const content = plan.content as any;
+          const countryId = (plan as any).countryId || 1;
+          const docxBuffer = await generateDocx(content, countryId);
+          const { storagePut } = await import("./storage");
+          const result = await storagePut(`exports/plan_${input.planId}.docx`, docxBuffer, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+          return { success: true, url: result.url };
+        } catch (error: any) {
+          return { success: false, error: `فشل تصدير Word: ${error.message}` };
+        }
+      }),
+    exportRealPdf: protectedProcedure
+      .input(z.object({ planId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const plan = await db.getPlanById(input.planId, ctx.user.id);
+        if (!plan || plan.status !== "ready") {
+          return { success: false, error: "الخطة غير جاهزة" };
+        }
+        try {
+          const content = plan.content as any;
+          const countryId = (plan as any).countryId || 1;
+          const docxBuffer = await generateDocx(content, countryId);
+          const pdfBuffer = await generatePdfFromDocx(docxBuffer);
+          const { storagePut } = await import("./storage");
+          const result = await storagePut(`exports/plan_${input.planId}.pdf`, pdfBuffer, "application/pdf");
+          return { success: true, url: result.url };
+        } catch (error: any) {
+          // Fallback to HTML PDF if LibreOffice not available
+          const content = plan.content as any;
+          const html = generatePlanHtml(content);
+          return { success: true, html, fallback: true };
+        }
       }),
   }),
 
