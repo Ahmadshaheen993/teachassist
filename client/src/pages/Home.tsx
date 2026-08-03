@@ -25,7 +25,7 @@ export default function Home() {
     },
     {
       icon: Wallet,
-      label: "الرصيد المتبقي",
+      label: "الخطط المتبقية",
       value: subStatus?.credits ?? 0,
       color: "text-orange-600",
       bg: "bg-orange-50",
@@ -47,7 +47,7 @@ export default function Home() {
           أهلاً، {user?.name || "معلم"}
         </h1>
         <p className="text-muted-foreground">
-          منصتك الذكية لتوليد خطط الدروس وأوراق العمل بضغطة زر
+          منصتك الذكية لتوليد خطط الدروس وأوراق العمل بضغطة زر — احصل على 5 خطط مجانية عند التسجيل
         </p>
       </div>
 

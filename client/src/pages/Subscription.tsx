@@ -67,7 +67,7 @@ export default function Subscription() {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground mb-1">رصيد الخطط الفردية</p>
+                <p className="text-sm text-muted-foreground mb-1">الخطط المتبقية (مجانية + مدفوعة)</p>
                 <p className="text-xl font-bold">{subStatus?.credits ?? 0} خطة</p>
               </div>
               <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center">

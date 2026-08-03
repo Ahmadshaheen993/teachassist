@@ -32,6 +32,9 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   const db = await getDb();
   if (!db) { console.warn("[Database] Cannot upsert user: database not available"); return; }
   try {
+    // Check if this is a new user before insert
+    const existing = await db.select().from(users).where(eq(users.openId, user.openId)).limit(1);
+    const isNewUser = existing.length === 0;
     const values: InsertUser = { openId: user.openId };
     const updateSet: Record<string, unknown> = {};
     const textFields = ["name", "email", "loginMethod"] as const;
@@ -48,6 +51,14 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     if (!values.lastSignedIn) values.lastSignedIn = new Date();
     if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
     await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+    // Grant 5 free plans to new users
+    if (isNewUser) {
+      const insertedUser = await db.select().from(users).where(eq(users.openId, user.openId)).limit(1);
+      if (insertedUser.length > 0) {
+        await addCredits(insertedUser[0].id, 5);
+        console.log(`[Database] Granted 5 free plans to new user: ${user.openId}`);
+      }
+    }
   } catch (error) { console.error("[Database] Failed to upsert user:", error); throw error; }
 }
 

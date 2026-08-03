@@ -309,7 +309,7 @@ export const appRouter = router({
         // Check eligibility
         const eligible = await db.canGenerate(userId);
         if (!eligible) {
-          return { success: false, error: "لا يوجد لديك اشتراك فعال أو رصيد كافٍ. يرجى الاشتراك أو شراء خطط فردية." };
+          return { success: false, error: "لقد استخدمت جميع خططك المجانية. يرجى الاشتراك أو شراء خطط فردية للمتابعة." };
         }
         // Check cache first
         const cached = await db.getCachedPlan(userId, input.lessonId, input.templateId);
