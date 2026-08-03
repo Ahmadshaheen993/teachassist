@@ -15,6 +15,7 @@ import {
   getFileDownloadUrl,
   downloadFile,
 } from "./googleDrive";
+import { extractPdfText } from "./pdfExtract";
 import { createCheckout } from "./payments";
 
 // ==================== Plan Generation System Prompt ====================
@@ -337,7 +338,7 @@ export const appRouter = router({
         const userMessage = `بيانات الدرس:
 - الدولة: قطر
 - المرحلة / الصف: ${textbook?.title ?? ""}
-- المادة: الكيمياء
+- المادة: العلوم
 - الوحدة: ${unit?.title ?? ""}
 - الدرس: ${lesson.title}
 - الصفحات: ${lesson.pageFrom ?? ""}-${lesson.pageTo ?? ""}
@@ -357,6 +358,7 @@ ${JSON.stringify(PLAN_JSON_SCHEMA)}`;
         });
         try {
           const response = await invokeLLM({
+            model: "claude-sonnet-4-6",
             messages: [
               { role: "system", content: PLAN_SYSTEM_PROMPT },
               { role: "user", content: userMessage },
@@ -417,6 +419,7 @@ ${JSON.stringify(plan.content)}
 ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
         try {
           const response = await invokeLLM({
+            model: "claude-haiku-4-5-20251001",
             messages: [
               { role: "system", content: WORKSHEET_SYSTEM_PROMPT },
               { role: "user", content: userMessage },
@@ -665,31 +668,158 @@ ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
         await db.verifySchool(input.id);
         return { success: true };
       }),
+    // Smart PDF Indexer: download a PDF from Drive, extract text, use Claude to parse the table of contents
+    indexPdf: adminProcedure
+      .input(z.object({
+        fileId: z.string(),
+        countryId: z.number(),
+        subjectId: z.number(),
+        gradeId: z.number(),
+        termId: z.number().optional(),
+        textbookTitle: z.string(),
+        editionYear: z.number().optional(),
+        maxPages: z.number().default(30),
+      }))
+      .mutation(async ({ input }) => {
+        try {
+          // 1. Download PDF from Drive
+          const pdfBuffer = await downloadFile(input.fileId);
+
+          // 2. Extract text from first N pages (table of contents is usually at the beginning)
+          const extractedText = await extractPdfText(pdfBuffer, input.maxPages);
+
+          // 3. Use Claude to parse the table of contents
+          const indexPrompt = `أنت خبير في تحليل فهوس كتب العلوم المدرسية. إليك نص أول ${input.maxPages} صفحة من كتاب مدرسي. استخرج الفهرس الكامل بشكل منظم.
+
+أنتج JSON يحتوي على:
+- units: مصفوفة من الوحدات، كل وحدة فيها: title (عنوان الوحدة)، sortOrder (رقمها)، lessons (مصفوفة من الدروس)
+- كل درس فيه: title (عنوان الدرس)، sortOrder (رقمه)، pageFrom (صفحة البداية)، pageTo (صفحة النهاية)، suggestedPeriods (عدد الحصص المقترح، افترض 1 إن لم يوجد)
+
+إليك النص المستخرج:
+${extractedText.slice(0, 50000)}`;
+
+          const response = await invokeLLM({
+            model: "claude-sonnet-4-6",
+            messages: [
+              { role: "system", content: "أنت مساعد فهرسة كتب مدرسية. استخرج الفهرس بدقة من النص المعطى." },
+              { role: "user", content: indexPrompt },
+            ],
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "textbook_index",
+                strict: true,
+                schema: {
+                  type: "object",
+                  properties: {
+                    units: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          title: { type: "string" },
+                          sortOrder: { type: "number" },
+                          lessons: {
+                            type: "array",
+                            items: {
+                              type: "object",
+                              properties: {
+                                title: { type: "string" },
+                                sortOrder: { type: "number" },
+                                pageFrom: { type: "number" },
+                                pageTo: { type: "number" },
+                                suggestedPeriods: { type: "number" },
+                              },
+                              required: ["title", "sortOrder", "pageFrom", "pageTo", "suggestedPeriods"],
+                            },
+                          },
+                        },
+                        required: ["title", "sortOrder", "lessons"],
+                      },
+                    },
+                  },
+                  required: ["units"],
+                },
+              },
+            },
+          });
+
+          const rawContent = response.choices?.[0]?.message?.content;
+          const contentStr = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
+          let index: { units: Array<{ title: string; sortOrder: number; lessons: Array<any> }> };
+          try { index = JSON.parse(contentStr); }
+          catch { index = JSON.parse(contentStr.replace(/```json\n?/g, "").replace(/```/g, "")); }
+
+          // 4. Create textbook record
+          const textbookId = await db.createTextbook({
+            countryId: input.countryId,
+            subjectId: input.subjectId,
+            gradeId: input.gradeId,
+            termId: input.termId,
+            title: input.textbookTitle,
+            editionYear: input.editionYear,
+            sourceNote: `Auto-indexed from Google Drive file: ${input.fileId}`,
+          } as any);
+
+          // 5. Create units and lessons
+          let unitCount = 0;
+          let lessonCount = 0;
+          for (const unit of index.units) {
+            const unitId = await db.createUnit({
+              textbookId: textbookId!,
+              title: unit.title,
+              sortOrder: unit.sortOrder,
+            } as any);
+            unitCount++;
+            for (const lesson of unit.lessons) {
+              await db.createLesson({
+                unitId: unitId!,
+                title: lesson.title,
+                sortOrder: lesson.sortOrder,
+                pageFrom: lesson.pageFrom,
+                pageTo: lesson.pageTo,
+                suggestedPeriods: lesson.suggestedPeriods || 1,
+              } as any);
+              lessonCount++;
+            }
+          }
+
+          return {
+            success: true,
+            textbookId,
+            units: unitCount,
+            lessons: lessonCount,
+            index,
+          };
+        } catch (error: any) {
+          return { success: false, error: `فشل الفهرسة: ${error.message}` };
+        }
+      }),
   }),
 
   // ==================== Google Drive — Curriculum Files ====================
   drive: router({
-    // List contents of a specific Drive folder
-    listFolder: publicProcedure
+    // List contents of a specific Drive folder — admin only
+    listFolder: adminProcedure
       .input(z.object({ folderId: z.string() }))
       .query(async ({ input }) => {
         return await listFolderContents(input.folderId);
       }),
-    // Get the full Qatar curriculum tree from Google Drive
-    qatarTree: publicProcedure.query(async () => {
+    // Get the full Qatar curriculum tree from Google Drive — admin only
+    qatarTree: adminProcedure.query(async () => {
       return await buildQatarCurriculumTree();
     }),
-    // Get Qatar folder IDs (for navigation)
-    qatarFolders: publicProcedure.query(() => QATAR_FOLDERS),
-    // Get view/download URLs for a file
-    fileUrls: publicProcedure
+    // Get Qatar folder IDs (for navigation) — admin only
+    qatarFolders: adminProcedure.query(() => QATAR_FOLDERS),
+    // Get view/download URLs for a file — admin only
+    fileUrls: adminProcedure
       .input(z.object({ fileId: z.string() }))
       .query(({ input }) => ({
         viewUrl: getFileViewUrl(input.fileId),
         downloadUrl: getFileDownloadUrl(input.fileId),
       })),
-    // Download a file from Drive (returns base64 for small files)
-    downloadFile: protectedProcedure
+    // Download a file from Drive (returns base64) — admin only
+    downloadFile: adminProcedure
       .input(z.object({ fileId: z.string() }))
       .mutation(async ({ input }) => {
         const buffer = await downloadFile(input.fileId);

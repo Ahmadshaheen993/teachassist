@@ -17,10 +17,10 @@ vi.mock("./db", () => ({
     { id: 1, stageId: 1, nameAr: "الثامن", sortOrder: 8 },
   ]),
   getSubjectsByCountry: vi.fn().mockResolvedValue([
-    { id: 1, countryId: 1, nameAr: "الكيمياء" },
+    { id: 1, countryId: 1, nameAr: "العلوم" },
   ]),
   getTextbooks: vi.fn().mockResolvedValue([
-    { id: 1, countryId: 1, subjectId: 1, gradeId: 1, title: "الكيمياء للصف الثامن" },
+    { id: 1, countryId: 1, subjectId: 1, gradeId: 1, title: "العلوم للصف الثامن" },
   ]),
   getUnitsByTextbook: vi.fn().mockResolvedValue([
     { id: 1, textbookId: 1, title: "الوحدة الأولى", sortOrder: 1 },
@@ -35,7 +35,7 @@ vi.mock("./db", () => ({
     id: 1, textbookId: 1, title: "الوحدة الأولى", sortOrder: 1,
   }),
   getTextbookById: vi.fn().mockResolvedValue({
-    id: 1, countryId: 1, subjectId: 1, gradeId: 1, title: "الكيمياء للصف الثامن",
+    id: 1, countryId: 1, subjectId: 1, gradeId: 1, title: "العلوم للصف الثامن",
   }),
   getTemplateByCountry: vi.fn().mockResolvedValue({
     id: 1, countryId: 1, nameAr: "قالب قطر", fields: { strategies: ["التعلم التعاوني", "الاستقصاء"], values: ["التعاون", "الإتقان"] },
@@ -99,7 +99,7 @@ vi.mock("./_core/llm", () => ({
     choices: [{
       message: {
         content: JSON.stringify({
-          basic_info: { subject: "الكيمياء", grade: "الثامن", unit: "الوحدة الأولى", lesson: "الدرس 1", date: "2026-08-03", periods: 1, pages: "12-18" },
+          basic_info: { subject: "العلوم", grade: "الثامن", unit: "الوحدة الأولى", lesson: "الدرس 1", date: "2026-08-03", periods: 1, pages: "12-18" },
           objectives: { cognitive: ["أن يعرّف الطالب المادة"], skills: ["أن يصنف خصائص المادة"], affective: ["أن يقدر أهمية المادة"] },
           warm_up: "سؤال تمهيدي",
           strategies: ["التعلم التعاوني"],
@@ -169,7 +169,7 @@ describe("Curriculum Router", () => {
     const caller = appRouter.createCaller({});
     const result = await caller.curriculum.textbooks({ countryId: 1, subjectId: 1, gradeId: 1 });
     expect(result).toHaveLength(1);
-    expect(result[0].title).toBe("الكيمياء للصف الثامن");
+    expect(result[0].title).toBe("العلوم للصف الثامن");
   });
 
   it("fetches lessons by unit", async () => {
@@ -280,6 +280,6 @@ describe("Plan Generation", () => {
     const result = await caller.plans.generate({ lessonId: 1, templateId: 1, periods: 1 });
     expect(result.success).toBe(true);
     expect(result.content).toBeDefined();
-    expect(result.content.basic_info.subject).toBe("الكيمياء");
+    expect(result.content.basic_info.subject).toBe("العلوم");
   });
 });

@@ -444,7 +444,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
 // Converts OpenAI-compatible InvokeParams to Anthropic Messages API format
 // and converts the response back to InvokeResult format.
 
-const ANTHROPIC_DEFAULT_MODEL = "claude-sonnet-4-20250514";
+const ANTHROPIC_DEFAULT_MODEL = "claude-sonnet-4-6";
 const ANTHROPIC_DEFAULT_MAX_TOKENS = 4096;
 
 async function invokeAnthropicDirect(params: InvokeParams): Promise<InvokeResult> {
@@ -588,8 +588,9 @@ export async function listLLMModels(): Promise<ModelsResponse> {
     return {
       object: "list",
       data: [
+        { id: "claude-sonnet-4-6", object: "model", created: 1719984000, owned_by: "anthropic" },
+        { id: "claude-haiku-4-5-20251001", object: "model", created: 1729468800, owned_by: "anthropic" },
         { id: "claude-sonnet-4-20250514", object: "model", created: 1719984000, owned_by: "anthropic" },
-        { id: "claude-haiku-3-5-20241022", object: "model", created: 1729468800, owned_by: "anthropic" },
         { id: "claude-3-5-sonnet-20241022", object: "model", created: 1729468800, owned_by: "anthropic" },
         { id: "claude-3-opus-20240229", object: "model", created: 1709164800, owned_by: "anthropic" },
       ],

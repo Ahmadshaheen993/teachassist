@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ShieldCheck, Plus, School, BookOpen, FileText, Building2, CheckCircle2 } from "lucide-react";
+import { ShieldCheck, Plus, School, BookOpen, FileText, Building2, CheckCircle2, Sparkles, FolderOpen, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Admin() {
@@ -35,6 +35,7 @@ export default function Admin() {
           <TabsTrigger value="schools" className="gap-2"><Building2 className="w-4 h-4" /> المدارس</TabsTrigger>
           <TabsTrigger value="curriculum" className="gap-2"><BookOpen className="w-4 h-4" /> المناهج</TabsTrigger>
           <TabsTrigger value="add-lesson" className="gap-2"><FileText className="w-4 h-4" /> إضافة درس</TabsTrigger>
+          <TabsTrigger value="indexer" className="gap-2"><Sparkles className="w-4 h-4" /> الفهرسة الذكية</TabsTrigger>
         </TabsList>
 
         <TabsContent value="schools" className="mt-4">
@@ -45,6 +46,9 @@ export default function Admin() {
         </TabsContent>
         <TabsContent value="add-lesson" className="mt-4">
           <AddLessonTab />
+        </TabsContent>
+        <TabsContent value="indexer" className="mt-4">
+          <SmartIndexerTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -302,3 +306,243 @@ function AddLessonTab() {
 }
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+function SmartIndexerTab() {
+  const { data: countries } = trpc.admin.countries.useQuery();
+  const { data: qatarTree } = trpc.drive.qatarTree.useQuery() as any;
+  const [countryId, setCountryId] = useState<number | null>(null);
+  const { data: stages } = trpc.curriculum.stages.useQuery({ countryId: countryId! }, { enabled: !!countryId });
+  const [stageId, setStageId] = useState<number | null>(null);
+  const { data: grades } = trpc.curriculum.grades.useQuery({ stageId: stageId! }, { enabled: !!stageId }) as any;
+  const [gradeId, setGradeId] = useState<number | null>(null);
+  const { data: subjects } = trpc.curriculum.subjects.useQuery({ countryId: countryId! }, { enabled: !!countryId });
+  const [subjectId, setSubjectId] = useState<number | null>(null);
+
+  // Drive folder navigation state
+  const [currentFolderId, setCurrentFolderId] = useState<string>("");
+  const [selectedFileId, setSelectedFileId] = useState<string>("");
+  const [selectedFileName, setSelectedFileName] = useState<string>("");
+  const [textbookTitle, setTextbookTitle] = useState("");
+  const [maxPages, setMaxPages] = useState(30);
+  const [indexResult, setIndexResult] = useState<any>(null);
+
+  const { data: folderContents } = trpc.drive.listFolder.useQuery(
+    { folderId: currentFolderId },
+    { enabled: !!currentFolderId }
+  );
+
+  const indexPdfMutation = trpc.admin.indexPdf.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(`تمت الفهرسة بنجاح: ${data.units} وحدة، ${data.lessons} درس`);
+        setIndexResult(data);
+      } else {
+        toast.error(data.error || "فشلت الفهرسة");
+      }
+    },
+    onError: (err: any) => toast.error(`خطأ: ${err.message}`),
+  });
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Sparkles className="w-5 h-5 text-primary" /> الفهرسة الذكية لكتب Google Drive</CardTitle>
+          <CardDescription>اختر كتاب PDF من Google Drive، سيقوم Claude بقراءة الفهرس واستخراج الوحدات والدروس تلقائياً وكتابتها في قاعدة البيانات</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Step 1: Select curriculum metadata */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-muted-foreground">الخطوة 1: بيانات الكتاب</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <Label className="mb-2 block">الدولة</Label>
+                <Select onValueChange={(v) => { setCountryId(+v); setStageId(null); setGradeId(null); setSubjectId(null); }}>
+                  <SelectTrigger><SelectValue placeholder="اختر" /></SelectTrigger>
+                  <SelectContent>{countries?.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.nameAr}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="mb-2 block">المرحلة</Label>
+                <Select disabled={!stages} onValueChange={(v) => { setStageId(+v); setGradeId(null); }}>
+                  <SelectTrigger><SelectValue placeholder="اختر" /></SelectTrigger>
+                  <SelectContent>{stages?.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.nameAr}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="mb-2 block">الصف</Label>
+                <Select disabled={!grades} onValueChange={(v) => setGradeId(+v)}>
+                  <SelectTrigger><SelectValue placeholder="اختر" /></SelectTrigger>
+                  <SelectContent>{grades?.map((g: any) => <SelectItem key={g.id} value={String(g.id)}>{g.nameAr}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="mb-2 block">المادة</Label>
+                <Select disabled={!subjects} onValueChange={(v) => setSubjectId(+v)}>
+                  <SelectTrigger><SelectValue placeholder="اختر" /></SelectTrigger>
+                  <SelectContent>{subjects?.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.nameAr}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label className="mb-2 block">عنوان الكتاب</Label>
+                <Input value={textbookTitle} onChange={(e) => setTextbookTitle(e.target.value)} placeholder="مثال: العلوم للصف الثامن - الفصل الأول" />
+              </div>
+              <div>
+                <Label className="mb-2 block">عدد صفحات الفهرسة (افتراضي 30)</Label>
+                <Input type="number" value={maxPages} onChange={(e) => setMaxPages(+e.target.value)} min={5} max={100} />
+              </div>
+            </div>
+          </div>
+
+          {/* Step 2: Browse Drive folders and select PDF */}
+          <div className="space-y-3 pt-4 border-t">
+            <h3 className="text-sm font-semibold text-muted-foreground">الخطوة 2: اختيار كتاب PDF من Google Drive</h3>
+            {!currentFolderId ? (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">تصفح مجلدات مناهج قطر:</p>
+                <div className="flex flex-wrap gap-2">
+                  {qatarTree?.semesters?.map((sem: any) => (
+                    <Button key={sem.folderId} variant="outline" size="sm" onClick={() => setCurrentFolderId(sem.folderId)}>
+                      <FolderOpen className="ml-2 h-4 w-4" /> {sem.name}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => { setCurrentFolderId(""); setSelectedFileId(""); setSelectedFileName(""); }}>
+                    ← رجوع
+                  </Button>
+                  <span className="text-sm text-muted-foreground">المجلد الحالي</span>
+                </div>
+                <div className="space-y-1 max-h-64 overflow-y-auto">
+                  {folderContents?.map((item: any) => {
+                    const isFolder = item.mimeType === "application/vnd.google-apps.folder";
+                    const isPdf = item.mimeType === "application/pdf";
+                    return (
+                      <div
+                        key={item.id}
+                        className={`flex items-center gap-3 p-2 rounded-lg border cursor-pointer transition-colors ${
+                          selectedFileId === item.id ? "border-primary bg-primary/5" : "hover:bg-muted/50"
+                        }`}
+                        onClick={() => {
+                          if (isFolder) {
+                            setCurrentFolderId(item.id);
+                            setSelectedFileId("");
+                            setSelectedFileName("");
+                          } else if (isPdf) {
+                            setSelectedFileId(item.id);
+                            setSelectedFileName(item.name);
+                            if (!textbookTitle) setTextbookTitle(item.name.replace(/\.pdf$/i, ""));
+                          }
+                        }}
+                      >
+                        {isFolder ? (
+                          <FolderOpen className="h-5 w-5 text-primary" />
+                        ) : isPdf ? (
+                          <FileText className="h-5 w-5 text-orange-500" />
+                        ) : (
+                          <FileText className="h-5 w-5 text-muted-foreground" />
+                        )}
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">{item.name}</p>
+                          {item.size && (
+                            <p className="text-xs text-muted-foreground">
+                              {(Number(item.size) / 1024 / 1024).toFixed(1)} MB
+                            </p>
+                          )}
+                        </div>
+                        {selectedFileId === item.id && (
+                          <CheckCircle2 className="h-4 w-4 text-primary" />
+                        )}
+                      </div>
+                    );
+                  })}
+                  {folderContents?.length === 0 && (
+                    <p className="text-center py-4 text-muted-foreground text-sm">المجلد فارغ</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Step 3: Run indexer */}
+          {selectedFileId && (
+            <div className="space-y-3 pt-4 border-t">
+              <h3 className="text-sm font-semibold text-muted-foreground">الخطوة 3: تشغيل الفهرسة</h3>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                <FileText className="h-8 w-8 text-orange-500" />
+                <div className="flex-1">
+                  <p className="font-medium text-sm">{selectedFileName}</p>
+                  <p className="text-xs text-muted-foreground">سيتم استخراج أول {maxPages} صفحة وإرسالها لـ Claude</p>
+                </div>
+              </div>
+              <Button
+                onClick={() => {
+                  if (!countryId || !subjectId || !gradeId || !textbookTitle) {
+                    toast.error("يرجى إكمال بيانات الكتاب أولاً");
+                    return;
+                  }
+                  setIndexResult(null);
+                  indexPdfMutation.mutate({
+                    fileId: selectedFileId,
+                    countryId,
+                    subjectId,
+                    gradeId,
+                    textbookTitle,
+                    maxPages,
+                  });
+                }}
+                disabled={indexPdfMutation.isPending || !countryId || !subjectId || !gradeId}
+                className="w-full"
+              >
+                {indexPdfMutation.isPending ? (
+                  <><Loader2 className="ml-2 h-4 w-4 animate-spin" /> جاري الفهرسة... قد يستغرق دقيقة</>
+                ) : (
+                  <><Sparkles className="ml-2 h-4 w-4" /> ابدأ الفهرسة الذكية</>
+                )}
+              </Button>
+            </div>
+          )}
+
+          {/* Results */}
+          {indexResult && indexResult.success && (
+            <div className="space-y-3 pt-4 border-t">
+              <h3 className="text-sm font-semibold text-green-600">نتيجة الفهرسة</h3>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-center p-4 rounded-lg bg-green-50 dark:bg-green-950/20">
+                  <p className="text-2xl font-bold text-green-600">{indexResult.units}</p>
+                  <p className="text-sm text-muted-foreground">وحدة</p>
+                </div>
+                <div className="text-center p-4 rounded-lg bg-green-50 dark:bg-green-950/20">
+                  <p className="text-2xl font-bold text-green-600">{indexResult.lessons}</p>
+                  <p className="text-sm text-muted-foreground">درس</p>
+                </div>
+                <div className="text-center p-4 rounded-lg bg-green-50 dark:bg-green-950/20">
+                  <p className="text-2xl font-bold text-green-600">#{indexResult.textbookId}</p>
+                  <p className="text-sm text-muted-foreground">رقم الكتاب</p>
+                </div>
+              </div>
+              {indexResult.index?.units?.map((unit: any, i: number) => (
+                <div key={i} className="p-3 rounded-lg border">
+                  <p className="font-semibold text-sm mb-2">{unit.title}</p>
+                  <div className="space-y-1">
+                    {unit.lessons?.map((lesson: any, j: number) => (
+                      <div key={j} className="text-xs text-muted-foreground flex justify-between">
+                        <span>{lesson.title}</span>
+                        <span>ص{lesson.pageFrom}-{lesson.pageTo}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
