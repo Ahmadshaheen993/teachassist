@@ -82,6 +82,7 @@ export const textbooks = mysqlTable("textbooks", {
   title: varchar("title", { length: 255 }).notNull(),
   editionYear: int("editionYear"),
   sourceNote: text("sourceNote"),
+  status: mysqlEnum("status", ["draft", "approved"]).notNull().default("draft"),
 });
 
 export const units = mysqlTable("units", {
@@ -89,6 +90,7 @@ export const units = mysqlTable("units", {
   textbookId: int("textbookId").notNull(),
   title: varchar("title", { length: 255 }).notNull(),
   sortOrder: int("sortOrder").notNull().default(0),
+  status: mysqlEnum("status", ["draft", "approved"]).notNull().default("draft"),
 });
 
 export const lessons = mysqlTable("lessons", {
@@ -101,6 +103,7 @@ export const lessons = mysqlTable("lessons", {
   pageFrom: int("pageFrom"),
   pageTo: int("pageTo"),
   suggestedPeriods: int("suggestedPeriods").notNull().default(1),
+  status: mysqlEnum("status", ["draft", "approved"]).notNull().default("draft"),
 });
 
 // ================= 3) اختيارات المعلم المحفوظة =================

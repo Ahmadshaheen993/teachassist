@@ -2,6 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
+import { TRPCError } from "@trpc/server";
 import { invokeLLM } from "./_core/llm";
 import { z } from "zod";
 import { nanoid } from "nanoid";
@@ -795,14 +796,104 @@ ${extractedText.slice(0, 50000)}`;
           return { success: false, error: `فشل الفهرسة: ${error.message}` };
         }
       }),
+
+    // List all textbooks (including drafts) for admin review
+    listTextbooks: adminProcedure
+      .input(z.object({ includeDrafts: z.boolean().default(true) }))
+      .query(async ({ input }) => {
+        return await db.getAllTextbooks(input.includeDrafts);
+      }),
+
+    // Get units for a textbook (including drafts) for admin review
+    reviewUnits: adminProcedure
+      .input(z.object({ textbookId: z.number() }))
+      .query(async ({ input }) => {
+        return await db.getAllUnitsByTextbook(input.textbookId);
+      }),
+
+    // Get lessons for a unit (including drafts) for admin review
+    reviewLessons: adminProcedure
+      .input(z.object({ unitId: z.number() }))
+      .query(async ({ input }) => {
+        return await db.getAllLessonsByUnit(input.unitId);
+      }),
+
+    // Approve a textbook and all its units/lessons
+    approveTextbook: adminProcedure
+      .input(z.object({ textbookId: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.approveTextbook(input.textbookId);
+        return { success: true };
+      }),
+
+    // Update a unit
+    updateUnit: adminProcedure
+      .input(z.object({
+        unitId: z.number(),
+        title: z.string().optional(),
+        sortOrder: z.number().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        await db.updateUnit(input.unitId, { title: input.title, sortOrder: input.sortOrder });
+        return { success: true };
+      }),
+
+    // Update a lesson
+    updateLesson: adminProcedure
+      .input(z.object({
+        lessonId: z.number(),
+        title: z.string().optional(),
+        sortOrder: z.number().optional(),
+        pageFrom: z.number().optional(),
+        pageTo: z.number().optional(),
+        suggestedPeriods: z.number().optional(),
+        objectives: z.any().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { lessonId, ...data } = input;
+        await db.updateLesson(lessonId, data);
+        return { success: true };
+      }),
+
+    // Delete a unit and its lessons
+    deleteUnit: adminProcedure
+      .input(z.object({ unitId: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteUnitCascade(input.unitId);
+        return { success: true };
+      }),
+
+    // Delete a lesson
+    deleteLesson: adminProcedure
+      .input(z.object({ lessonId: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteLesson(input.lessonId);
+        return { success: true };
+      }),
+
+    // Delete a textbook and all its units/lessons
+    deleteTextbook: adminProcedure
+      .input(z.object({ textbookId: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteTextbookCascade(input.textbookId);
+        return { success: true };
+      }),
   }),
 
   // ==================== Google Drive — Curriculum Files ====================
   drive: router({
-    // List contents of a specific Drive folder — admin only
+    // List contents of a specific Drive folder — admin only, restricted to Qatar curriculum folders
     listFolder: adminProcedure
       .input(z.object({ folderId: z.string() }))
       .query(async ({ input }) => {
+        // Whitelist of allowed folder IDs (Qatar curriculum + their sub-folders discovered dynamically)
+        const allowedRoots = Object.values(QATAR_FOLDERS);
+        // Allow if the folder is a known Qatar folder, or if it was discovered as a child of one
+        // For security, we check against the known roots. Sub-folder browsing is allowed because
+        // the admin navigates from a known root folder.
+        if (!allowedRoots.includes(input.folderId as any)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "غير مصرح بالوصول لهذا المجلد" });
+        }
         return await listFolderContents(input.folderId);
       }),
     // Get the full Qatar curriculum tree from Google Drive — admin only

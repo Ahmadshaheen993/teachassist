@@ -43,6 +43,7 @@
 
 ## الاستقلالية والنشر
 - [x] رفع الكود إلى GitHub (https://github.com/Ahmadshaheen993/teachassist)
+- [x] إصلاح القوائم المنسدلة: تفعيل isActive=true لقطر في DB
 - [ ] استبدال Manus OAuth بمصادقة مستقلة (بريد/جوال)
 - [x] الحصول على مفتاح Anthropic API
 - [x] تعديل server/_core/llm.ts لدعم Anthropic مباشرة مع fallback لـ Manus Forge
@@ -57,6 +58,9 @@
 - [x] تحديث الموديلات (claude-sonnet-4-6 للخطط، claude-haiku-4-5 لأوراق العمل)
 - [x] إصلاح المادة من الكيمياء إلى العلوم (DB + الكود + الاختبارات)
 - [x] بناء أداة الفهرسة الذكية من لوحة المدير (server/pdfExtract.ts + admin.indexPdf + SmartIndexerTab)
+- [x] إضافة شاشة مراجعة واعتماد الفهارس (ReviewIndexTab) مع status: draft/approved
+- [x] تأمين Drive: حصر listFolder بمجلدات قطر المعرّفة فقط (whitelist)
+- [x] إضافة دوال admin: listTextbooks, reviewUnits, reviewLessons, approveTextbook, updateUnit, updateLesson, deleteUnit, deleteLesson, deleteTextbook
 
 ## إصلاحات FIXES.md
 - [x] خطوة 1: تقليل الخطط المجانية من 5 إلى 2 + إضافة دوال db-additions.ts

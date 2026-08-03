@@ -129,18 +129,100 @@ export async function getTermsByCountry(countryId: number) {
 export async function getTextbooks(countryId: number, subjectId: number, gradeId: number) {
   const db = await getDb(); if (!db) return [];
   return db.select().from(textbooks).where(
-    and(eq(textbooks.countryId, countryId), eq(textbooks.subjectId, subjectId), eq(textbooks.gradeId, gradeId))
+    and(eq(textbooks.countryId, countryId), eq(textbooks.subjectId, subjectId), eq(textbooks.gradeId, gradeId), eq(textbooks.status, "approved"))
   );
 }
 
 export async function getUnitsByTextbook(textbookId: number) {
   const db = await getDb(); if (!db) return [];
-  return db.select().from(units).where(eq(units.textbookId, textbookId)).orderBy(units.sortOrder);
+  return db.select().from(units).where(and(eq(units.textbookId, textbookId), eq(units.status, "approved"))).orderBy(units.sortOrder);
 }
 
 export async function getLessonsByUnit(unitId: number) {
   const db = await getDb(); if (!db) return [];
+  return db.select().from(lessons).where(and(eq(lessons.unitId, unitId), eq(lessons.status, "approved"))).orderBy(lessons.sortOrder);
+}
+
+// Admin: get all textbooks (including drafts)
+export async function getAllTextbooks(includeDrafts: boolean = true) {
+  const db = await getDb(); if (!db) return [];
+  if (includeDrafts) {
+    return db.select().from(textbooks).orderBy(textbooks.id);
+  }
+  return db.select().from(textbooks).where(eq(textbooks.status, "approved")).orderBy(textbooks.id);
+}
+
+// Admin: get units for a textbook (including drafts)
+export async function getAllUnitsByTextbook(textbookId: number) {
+  const db = await getDb(); if (!db) return [];
+  return db.select().from(units).where(eq(units.textbookId, textbookId)).orderBy(units.sortOrder);
+}
+
+// Admin: get lessons for a unit (including drafts)
+export async function getAllLessonsByUnit(unitId: number) {
+  const db = await getDb(); if (!db) return [];
   return db.select().from(lessons).where(eq(lessons.unitId, unitId)).orderBy(lessons.sortOrder);
+}
+
+// Admin: approve a textbook and all its units/lessons
+export async function approveTextbook(textbookId: number) {
+  const db = await getDb(); if (!db) return;
+  await db.update(textbooks).set({ status: "approved" }).where(eq(textbooks.id, textbookId));
+  const unitRows = await db.select().from(units).where(eq(units.textbookId, textbookId));
+  for (const u of unitRows) {
+    await db.update(units).set({ status: "approved" }).where(eq(units.id, u.id));
+    await db.update(lessons).set({ status: "approved" }).where(eq(lessons.unitId, u.id));
+  }
+}
+
+// Admin: update a unit
+export async function updateUnit(unitId: number, data: { title?: string; sortOrder?: number }) {
+  const db = await getDb(); if (!db) return;
+  const updates: any = {};
+  if (data.title !== undefined) updates.title = data.title;
+  if (data.sortOrder !== undefined) updates.sortOrder = data.sortOrder;
+  if (Object.keys(updates).length > 0) {
+    await db.update(units).set(updates).where(eq(units.id, unitId));
+  }
+}
+
+// Admin: update a lesson
+export async function updateLesson(lessonId: number, data: { title?: string; sortOrder?: number; pageFrom?: number; pageTo?: number; suggestedPeriods?: number; objectives?: any }) {
+  const db = await getDb(); if (!db) return;
+  const updates: any = {};
+  if (data.title !== undefined) updates.title = data.title;
+  if (data.sortOrder !== undefined) updates.sortOrder = data.sortOrder;
+  if (data.pageFrom !== undefined) updates.pageFrom = data.pageFrom;
+  if (data.pageTo !== undefined) updates.pageTo = data.pageTo;
+  if (data.suggestedPeriods !== undefined) updates.suggestedPeriods = data.suggestedPeriods;
+  if (data.objectives !== undefined) updates.objectives = data.objectives;
+  if (Object.keys(updates).length > 0) {
+    await db.update(lessons).set(updates).where(eq(lessons.id, lessonId));
+  }
+}
+
+// Admin: delete a unit and its lessons
+export async function deleteUnitCascade(unitId: number) {
+  const db = await getDb(); if (!db) return;
+  await db.delete(lessons).where(eq(lessons.unitId, unitId));
+  await db.delete(units).where(eq(units.id, unitId));
+}
+
+// Admin: delete a lesson
+export async function deleteLesson(lessonId: number) {
+  const db = await getDb(); if (!db) return;
+  await db.delete(lessons).where(eq(lessons.id, lessonId));
+}
+
+// Admin: delete a textbook and all its units/lessons
+export async function deleteTextbookCascade(textbookId: number) {
+  const db = await getDb(); if (!db) return;
+  const unitRows = await db.select().from(units).where(eq(units.textbookId, textbookId));
+  for (const u of unitRows) {
+    await db.delete(lessons).where(eq(lessons.unitId, u.id));
+  }
+  await db.delete(units).where(eq(units.textbookId, textbookId));
+  await db.delete(textbooks).where(eq(textbooks.id, textbookId));
 }
 
 export async function getLessonById(id: number) {

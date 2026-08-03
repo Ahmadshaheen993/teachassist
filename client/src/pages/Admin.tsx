@@ -36,6 +36,7 @@ export default function Admin() {
           <TabsTrigger value="curriculum" className="gap-2"><BookOpen className="w-4 h-4" /> المناهج</TabsTrigger>
           <TabsTrigger value="add-lesson" className="gap-2"><FileText className="w-4 h-4" /> إضافة درس</TabsTrigger>
           <TabsTrigger value="indexer" className="gap-2"><Sparkles className="w-4 h-4" /> الفهرسة الذكية</TabsTrigger>
+          <TabsTrigger value="review" className="gap-2"><CheckCircle2 className="w-4 h-4" /> مراجعة الفهارس</TabsTrigger>
         </TabsList>
 
         <TabsContent value="schools" className="mt-4">
@@ -49,6 +50,9 @@ export default function Admin() {
         </TabsContent>
         <TabsContent value="indexer" className="mt-4">
           <SmartIndexerTab />
+        </TabsContent>
+        <TabsContent value="review" className="mt-4">
+          <ReviewIndexTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -306,6 +310,7 @@ function AddLessonTab() {
 }
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Trash2, Edit, Save, X, CheckCircle } from "lucide-react";
 
 function SmartIndexerTab() {
   const { data: countries } = trpc.admin.countries.useQuery();
@@ -539,6 +544,143 @@ function SmartIndexerTab() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function ReviewIndexTab() {
+  const [selectedTextbookId, setSelectedTextbookId] = useState<number | null>(null);
+  const [editingUnitId, setEditingUnitId] = useState<number | null>(null);
+  const [editingLessonId, setEditingLessonId] = useState<number | null>(null);
+  const [editUnitTitle, setEditUnitTitle] = useState("");
+  const [editLessonTitle, setEditLessonTitle] = useState("");
+  const [editLessonPages, setEditLessonPages] = useState({ from: "", to: "" });
+
+  const { data: textbooks, refetch: refetchTextbooks } = trpc.admin.listTextbooks.useQuery({ includeDrafts: true });
+  const { data: units } = trpc.admin.reviewUnits.useQuery({ textbookId: selectedTextbookId! }, { enabled: !!selectedTextbookId });
+  const [expandedUnitId, setExpandedUnitId] = useState<number | null>(null);
+  const { data: lessons } = trpc.admin.reviewLessons.useQuery({ unitId: expandedUnitId! }, { enabled: !!expandedUnitId });
+
+  const approveMutation = trpc.admin.approveTextbook.useMutation({
+    onSuccess: () => { toast.success("تم اعتماد الكتاب وجميع وحداته ودروسه"); refetchTextbooks(); },
+    onError: (e: any) => toast.error(`خطأ: ${e.message}`),
+  });
+  const deleteTextbookMutation = trpc.admin.deleteTextbook.useMutation({
+    onSuccess: () => { toast.success("تم حذف الكتاب"); setSelectedTextbookId(null); refetchTextbooks(); },
+    onError: (e: any) => toast.error(`خطأ: ${e.message}`),
+  });
+  const updateUnitMutation = trpc.admin.updateUnit.useMutation({
+    onSuccess: () => { toast.success("تم تحديث الوحدة"); setEditingUnitId(null); },
+    onError: (e: any) => toast.error(`خطأ: ${e.message}`),
+  });
+  const updateLessonMutation = trpc.admin.updateLesson.useMutation({
+    onSuccess: () => { toast.success("تم تحديث الدرس"); setEditingLessonId(null); },
+    onError: (e: any) => toast.error(`خطأ: ${e.message}`),
+  });
+  const deleteUnitMutation = trpc.admin.deleteUnit.useMutation({
+    onSuccess: () => { toast.success("تم حذف الوحدة"); setExpandedUnitId(null); },
+    onError: (e: any) => toast.error(`خطأ: ${e.message}`),
+  });
+  const deleteLessonMutation = trpc.admin.deleteLesson.useMutation({
+    onSuccess: () => { toast.success("تم حذف الدرس"); },
+    onError: (e: any) => toast.error(`خطأ: ${e.message}`),
+  });
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><CheckCircle className="w-5 h-5 text-primary" /> مراجعة واعتماد الفهارس</CardTitle>
+          <CardDescription>راجع الفهارس المولّدة تلقائياً، عدّل العناوين والصفحات، ثم اعتمدها لظهورها للمعلمين</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            {textbooks?.map((t: any) => (
+              <div key={t.id} className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${selectedTextbookId === t.id ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`} onClick={() => setSelectedTextbookId(t.id)}>
+                <div className="flex-1">
+                  <p className="font-medium text-sm">{t.title}</p>
+                  <p className="text-xs text-muted-foreground">#{t.id} — {t.sourceNote || "إدخال يدوي"}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={t.status === "approved" ? "default" : "secondary"}>{t.status === "approved" ? "معتمد" : "مسودة"}</Badge>
+                  {t.status === "draft" && (
+                    <Button size="sm" variant="default" onClick={(e) => { e.stopPropagation(); approveMutation.mutate({ textbookId: t.id }); }}>
+                      <CheckCircle className="ml-1 h-3 w-3" /> اعتماد
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); if (confirm("حذف هذا الكتاب وجميع وحداته ودروسه؟")) deleteTextbookMutation.mutate({ textbookId: t.id }); }}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {textbooks?.length === 0 && <p className="text-center py-4 text-muted-foreground">لا توجد كتب</p>}
+          </div>
+
+          {selectedTextbookId && units && (
+            <div className="space-y-2 pt-4 border-t">
+              <h3 className="text-sm font-semibold">الوحدات</h3>
+              {units.map((u: any) => (
+                <div key={u.id} className="border rounded-lg">
+                  <div className="flex items-center justify-between p-3">
+                    {editingUnitId === u.id ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <Input value={editUnitTitle} onChange={(e) => setEditUnitTitle(e.target.value)} className="flex-1" />
+                        <Button size="sm" onClick={() => { updateUnitMutation.mutate({ unitId: u.id, title: editUnitTitle }); }}><Save className="h-4 w-4" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingUnitId(null)}><X className="h-4 w-4" /></Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2 flex-1 cursor-pointer" onClick={() => setExpandedUnitId(expandedUnitId === u.id ? null : u.id)}>
+                          <span className="text-xs text-muted-foreground">#{u.sortOrder}</span>
+                          <span className="font-medium text-sm">{u.title}</span>
+                          <Badge variant={u.status === "approved" ? "default" : "secondary"} className="text-xs">{u.status === "approved" ? "معتمد" : "مسودة"}</Badge>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => { setEditingUnitId(u.id); setEditUnitTitle(u.title); }}><Edit className="h-4 w-4" /></Button>
+                          <Button size="sm" variant="ghost" onClick={() => { if (confirm("حذف هذه الوحدة ودروسه؟")) deleteUnitMutation.mutate({ unitId: u.id }); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {expandedUnitId === u.id && lessons && (
+                    <div className="border-t bg-muted/30 p-3 space-y-1">
+                      {lessons.map((l: any) => (
+                        <div key={l.id} className="flex items-center justify-between p-2 rounded hover:bg-muted/50">
+                          {editingLessonId === l.id ? (
+                            <div className="flex items-center gap-2 flex-1">
+                              <Input value={editLessonTitle} onChange={(e) => setEditLessonTitle(e.target.value)} className="flex-1" placeholder="عنوان الدرس" />
+                              <Input type="number" value={editLessonPages.from} onChange={(e) => setEditLessonPages({ ...editLessonPages, from: e.target.value })} className="w-20" placeholder="من" />
+                              <Input type="number" value={editLessonPages.to} onChange={(e) => setEditLessonPages({ ...editLessonPages, to: e.target.value })} className="w-20" placeholder="إلى" />
+                              <Button size="sm" onClick={() => { updateLessonMutation.mutate({ lessonId: l.id, title: editLessonTitle, pageFrom: +editLessonPages.from || undefined, pageTo: +editLessonPages.to || undefined }); }}><Save className="h-4 w-4" /></Button>
+                              <Button size="sm" variant="ghost" onClick={() => setEditingLessonId(null)}><X className="h-4 w-4" /></Button>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-2 flex-1">
+                                <span className="text-xs text-muted-foreground">#{l.sortOrder}</span>
+                                <span className="text-sm">{l.title}</span>
+                                {l.pageFrom && l.pageTo && <span className="text-xs text-muted-foreground">ص{l.pageFrom}-{l.pageTo}</span>}
+                                <Badge variant={l.status === "approved" ? "default" : "secondary"} className="text-xs">{l.status === "approved" ? "معتمد" : "مسودة"}</Badge>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button size="sm" variant="ghost" onClick={() => { setEditingLessonId(l.id); setEditLessonTitle(l.title); setEditLessonPages({ from: String(l.pageFrom || ""), to: String(l.pageTo || "") }); }}><Edit className="h-3 w-3" /></Button>
+                                <Button size="sm" variant="ghost" onClick={() => { if (confirm("حذف هذا الدرس؟")) deleteLessonMutation.mutate({ lessonId: l.id }); }}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                      {lessons.length === 0 && <p className="text-center text-xs text-muted-foreground py-2">لا توجد دروس</p>}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {units.length === 0 && <p className="text-center py-4 text-muted-foreground">لا توجد وحدات</p>}
             </div>
           )}
         </CardContent>
