@@ -7,6 +7,14 @@ import { z } from "zod";
 import { nanoid } from "nanoid";
 import * as db from "./db";
 import { generateDocx, generatePdfFromDocx } from "./exportDoc";
+import {
+  listFolderContents,
+  buildQatarCurriculumTree,
+  QATAR_FOLDERS,
+  getFileViewUrl,
+  getFileDownloadUrl,
+  downloadFile,
+} from "./googleDrive";
 
 // ==================== Plan Generation System Prompt ====================
 const PLAN_SYSTEM_PROMPT = `أنت خبير مناهج وطرائق تدريس متخصص في إعداد خطط الدروس اليومية وفق النماذج الوزارية الخليجية.
@@ -637,6 +645,40 @@ ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
       .mutation(async ({ input }) => {
         await db.verifySchool(input.id);
         return { success: true };
+      }),
+  }),
+
+  // ==================== Google Drive — Curriculum Files ====================
+  drive: router({
+    // List contents of a specific Drive folder
+    listFolder: publicProcedure
+      .input(z.object({ folderId: z.string() }))
+      .query(async ({ input }) => {
+        return await listFolderContents(input.folderId);
+      }),
+    // Get the full Qatar curriculum tree from Google Drive
+    qatarTree: publicProcedure.query(async () => {
+      return await buildQatarCurriculumTree();
+    }),
+    // Get Qatar folder IDs (for navigation)
+    qatarFolders: publicProcedure.query(() => QATAR_FOLDERS),
+    // Get view/download URLs for a file
+    fileUrls: publicProcedure
+      .input(z.object({ fileId: z.string() }))
+      .query(({ input }) => ({
+        viewUrl: getFileViewUrl(input.fileId),
+        downloadUrl: getFileDownloadUrl(input.fileId),
+      })),
+    // Download a file from Drive (returns base64 for small files)
+    downloadFile: protectedProcedure
+      .input(z.object({ fileId: z.string() }))
+      .mutation(async ({ input }) => {
+        const buffer = await downloadFile(input.fileId);
+        return {
+          success: true,
+          base64: buffer.toString("base64"),
+          size: buffer.length,
+        };
       }),
   }),
 });

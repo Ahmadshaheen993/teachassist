@@ -212,14 +212,27 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveApiUrl = () =>
-  ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+// Check if Anthropic direct API key is available (takes priority)
+const useAnthropicDirect = () => ENV.anthropicApiKey && ENV.anthropicApiKey.trim().length > 0;
+
+const resolveApiUrl = () => {
+  if (useAnthropicDirect()) {
+    return "https://api.anthropic.com/v1/messages";
+  }
+  return ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
     ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
     : "https://forge.manus.im/v1/chat/completions";
+};
 
 const assertApiKey = () => {
+  if (useAnthropicDirect()) {
+    if (!ENV.anthropicApiKey) {
+      throw new Error("ANTHROPIC_API_KEY is not configured");
+    }
+    return;
+  }
   if (!ENV.forgeApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+    throw new Error("No LLM API key configured (neither ANTHROPIC_API_KEY nor Forge key)");
   }
 };
 
@@ -358,6 +371,13 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     max_tokens,
   } = params;
 
+  const isAnthropic = useAnthropicDirect();
+
+  // Anthropic uses a different API format than OpenAI-compatible Forge
+  if (isAnthropic) {
+    return await invokeAnthropicDirect(params);
+  }
+
   const payload: Record<string, unknown> = {
     messages: messages.map(normalizeMessage),
   };
@@ -420,6 +440,134 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   return (await response.json()) as InvokeResult;
 }
 
+// ==================== Anthropic Direct API ====================
+// Converts OpenAI-compatible InvokeParams to Anthropic Messages API format
+// and converts the response back to InvokeResult format.
+
+const ANTHROPIC_DEFAULT_MODEL = "claude-sonnet-4-20250514";
+const ANTHROPIC_DEFAULT_MAX_TOKENS = 4096;
+
+async function invokeAnthropicDirect(params: InvokeParams): Promise<InvokeResult> {
+  const {
+    messages,
+    model,
+    maxTokens,
+    max_tokens,
+    outputSchema,
+    output_schema,
+    responseFormat,
+    response_format,
+  } = params;
+
+  // Extract system message (Anthropic uses a separate system parameter)
+  const systemMessages = messages.filter(m => m.role === "system");
+  const systemText = systemMessages
+    .map(m => typeof m.content === "string" ? m.content : JSON.stringify(m.content))
+    .join("\n\n");
+
+  // Convert messages to Anthropic format (only user/assistant, alternating)
+  const convertedMessages: Array<{ role: string; content: string }> = [];
+  for (const msg of messages) {
+    if (msg.role === "system") continue;
+    if (msg.role === "tool" || msg.role === "function") {
+      // Convert tool results to user messages with tool_result content
+      const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+      convertedMessages.push({ role: "user", content });
+      continue;
+    }
+    const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+    convertedMessages.push({ role: msg.role, content });
+  }
+
+  // Build Anthropic payload
+  const anthropicPayload: Record<string, unknown> = {
+    model: model || ANTHROPIC_DEFAULT_MODEL,
+    max_tokens: max_tokens ?? maxTokens ?? ANTHROPIC_DEFAULT_MAX_TOKENS,
+    messages: convertedMessages,
+  };
+
+  if (systemText) {
+    anthropicPayload.system = systemText;
+  }
+
+  // Handle JSON schema / structured output
+  const schema = outputSchema || output_schema;
+  const explicitFormat = responseFormat || response_format;
+  if (schema && schema.name && schema.schema) {
+    // Anthropic supports tool_use for structured output
+    anthropicPayload.tools = [{
+      name: schema.name,
+      description: `Output structured data according to the ${schema.name} schema`,
+      input_schema: schema.schema,
+    }];
+    anthropicPayload.tool_choice = { type: "tool", name: schema.name };
+  } else if (explicitFormat && explicitFormat.type === "json_object") {
+    // For json_object format, add instruction to output JSON
+    anthropicPayload.system = (systemText ? systemText + "\n\n" : "") + "You must respond with valid JSON only. No markdown, no code fences, just raw JSON.";
+  } else if (explicitFormat && explicitFormat.type === "json_schema" && explicitFormat.json_schema) {
+    anthropicPayload.tools = [{
+      name: explicitFormat.json_schema.name,
+      description: `Output structured data according to the ${explicitFormat.json_schema.name} schema`,
+      input_schema: explicitFormat.json_schema.schema,
+    }];
+    anthropicPayload.tool_choice = { type: "tool", name: explicitFormat.json_schema.name };
+  }
+
+  const response = await fetchWithBackoff("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": ENV.anthropicApiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify(anthropicPayload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Anthropic API invoke failed: ${response.status} ${response.statusText} – ${errorText}`
+    );
+  }
+
+  const anthropicResult = await response.json() as any;
+
+  // Convert Anthropic response to InvokeResult format
+  // Extract text content from response content blocks
+  let textContent = "";
+  let toolUseInput: any = null;
+
+  for (const block of anthropicResult.content || []) {
+    if (block.type === "text") {
+      textContent += block.text;
+    } else if (block.type === "tool_use") {
+      toolUseInput = block.input;
+    }
+  }
+
+  // If we got structured output via tool_use, serialize it as the content
+  const finalContent = toolUseInput !== null ? JSON.stringify(toolUseInput) : textContent;
+
+  return {
+    id: anthropicResult.id || "",
+    created: Math.floor(Date.now() / 1000),
+    model: anthropicResult.model || model || ANTHROPIC_DEFAULT_MODEL,
+    choices: [{
+      index: 0,
+      message: {
+        role: "assistant",
+        content: finalContent,
+      },
+      finish_reason: anthropicResult.stop_reason || "stop",
+    }],
+    usage: {
+      prompt_tokens: anthropicResult.usage?.input_tokens || 0,
+      completion_tokens: anthropicResult.usage?.output_tokens || 0,
+      total_tokens: (anthropicResult.usage?.input_tokens || 0) + (anthropicResult.usage?.output_tokens || 0),
+    },
+  };
+}
+
 export type ModelInfo = {
   id: string;
   object: string;
@@ -434,6 +582,19 @@ export type ModelsResponse = {
 
 export async function listLLMModels(): Promise<ModelsResponse> {
   assertApiKey();
+
+  // If using Anthropic direct, return a static list of available models
+  if (useAnthropicDirect()) {
+    return {
+      object: "list",
+      data: [
+        { id: "claude-sonnet-4-20250514", object: "model", created: 1719984000, owned_by: "anthropic" },
+        { id: "claude-haiku-3-5-20241022", object: "model", created: 1729468800, owned_by: "anthropic" },
+        { id: "claude-3-5-sonnet-20241022", object: "model", created: 1729468800, owned_by: "anthropic" },
+        { id: "claude-3-opus-20240229", object: "model", created: 1709164800, owned_by: "anthropic" },
+      ],
+    };
+  }
 
   const url = ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
     ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/models`

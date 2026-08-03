@@ -7,4 +7,9 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  // Anthropic API direct access (takes priority over Forge if set)
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+  // Google Drive API for curriculum files
+  googleDriveApiKey: process.env.GOOGLE_DRIVE_API_KEY ?? "",
+  googleServiceAccountJson: process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "",
 };

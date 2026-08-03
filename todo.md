@@ -44,7 +44,13 @@
 ## الاستقلالية والنشر
 - [x] رفع الكود إلى GitHub (https://github.com/Ahmadshaheen993/teachassist)
 - [ ] استبدال Manus OAuth بمصادقة مستقلة (بريد/جوال)
-- [ ] استخدام مفتاح Anthropic مباشر من السيرفر
-- [ ] تكامل Google Drive لتخزين القوالب وأرشفة الخطط
+- [x] الحصول على مفتاح Anthropic API
+- [x] تعديل server/_core/llm.ts لدعم Anthropic مباشرة مع fallback لـ Manus Forge
+- [x] إضافة ANTHROPIC_API_KEY كمتغير بيئة
+- [x] استكشاف هيكل Google Drive لمناهج قطر
+- [x] إنشاء مشروع teachassist على Google Cloud وتفعيل Drive API
+- [ ] إنشاء Service Account والحصول على مفتاح JSON
+- [x] إنشاء وحدة server/googleDrive.ts للتكامل مع Drive API
+- [x] ربط وحدة Drive بالمنصة لتحميل المناهج والكتب
 - [ ] استبدال القالب الوزاري الحالي بالنموذج الرسمي المعتمد
 - [ ] مطابقة بيانات المنهج (كيمياء الثامن) مع الكتاب الرسمي يدوياً
