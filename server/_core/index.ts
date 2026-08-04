@@ -32,13 +32,22 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+  // Trust proxy headers only when the deployment explicitly declares its hop count.
+  // For Manus/Cloudflare this must be configured after confirming the real topology.
+  const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? "0");
+  if (Number.isInteger(trustProxyHops) && trustProxyHops > 0 && trustProxyHops <= 5) {
+    app.set("trust proxy", trustProxyHops);
+  }
+
+  // Webhooks have a small, route-specific body limit and are mounted before the
+  // general parser so an attacker cannot send a 50 MB payment notification.
+  app.use("/api/webhooks", express.json({ limit: "64kb" }), paymentWebhooks);
+
+  app.use(express.json({ limit: "2mb" }));
+  app.use(express.urlencoded({ limit: "2mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
-  // Payment webhooks (MyFatoorah + Tap)
-  app.use("/api/webhooks", paymentWebhooks);
   // tRPC API
   app.use(
     "/api/trpc",

@@ -1,7 +1,7 @@
 /**
  * Rate Limiter — حماية من استهلاك مفرط لموارد Anthropic API
  *
- * استراتيجية: نافذة منزلقة (sliding window) في الذاكرة
+ * استراتيجية: نافذة ثابتة (fixed window) في الذاكرة
  * - generate: 10 طلبات/ساعة لكل مستخدم
  * - worksheet: 10 طلبات/ساعة لكل مستخدم
  * - redeem: 3 طلبات/ساعة لكل مستخدم
@@ -13,25 +13,26 @@
  */
 
 import { TRPCError } from "@trpc/server";
+import type { Request } from "express";
 
 type RateLimitEntry = {
   count: number;
   windowStart: number;
 };
 
-// Map<key, Map<userId, RateLimitEntry>>
-const rateLimitStore = new Map<string, Map<number, RateLimitEntry>>();
+// Map<action, Map<subject, RateLimitEntry>>
+const rateLimitStore = new Map<string, Map<string, RateLimitEntry>>();
 
 // Clean up old entries every 10 minutes
 const CLEANUP_INTERVAL = 10 * 60 * 1000;
 const WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
-setInterval(() => {
+const cleanupTimer = setInterval(() => {
   const now = Date.now();
   rateLimitStore.forEach((userMap, action) => {
-    userMap.forEach((entry, userId) => {
+    userMap.forEach((entry, subject) => {
       if (now - entry.windowStart > WINDOW_MS * 2) {
-        userMap.delete(userId);
+        userMap.delete(subject);
       }
     });
     if (userMap.size === 0) {
@@ -39,6 +40,7 @@ setInterval(() => {
     }
   });
 }, CLEANUP_INTERVAL);
+cleanupTimer.unref();
 
 interface RateLimitConfig {
   action: string;
@@ -51,7 +53,7 @@ interface RateLimitConfig {
  * يرمي TRPCError مع code=TOO_MANY_REQUESTS عند تجاوز الحد.
  */
 export function checkRateLimit(
-  userId: number,
+  subject: string | number,
   config: RateLimitConfig
 ): void {
   const { action, maxRequests, windowMs = WINDOW_MS } = config;
@@ -62,11 +64,12 @@ export function checkRateLimit(
   }
 
   const userMap = rateLimitStore.get(action)!;
-  const entry = userMap.get(userId);
+  const subjectKey = String(subject);
+  const entry = userMap.get(subjectKey);
 
   if (!entry || now - entry.windowStart > windowMs) {
     // Start new window
-    userMap.set(userId, { count: 1, windowStart: now });
+    userMap.set(subjectKey, { count: 1, windowStart: now });
     return;
   }
 
@@ -82,6 +85,32 @@ export function checkRateLimit(
   entry.count++;
 }
 
+function normalizeIp(ip: string): string {
+  const trimmed = ip.trim();
+  return trimmed.startsWith("::ffff:") ? trimmed.slice(7) : trimmed;
+}
+
+export function getClientIp(req: Pick<Request, "ip" | "socket">): string {
+  const candidate = req.ip || req.socket?.remoteAddress || "unknown";
+  return normalizeIp(candidate);
+}
+
+/**
+ * Payment limits bind the authenticated account to the resolved client IP.
+ * Express resolves req.ip according to the explicitly configured trust proxy setting.
+ */
+export function checkPaymentRateLimit(
+  userId: number,
+  req: Pick<Request, "ip" | "socket">,
+  config: RateLimitConfig
+): void {
+  checkRateLimit(`${userId}:${getClientIp(req)}`, config);
+}
+
+export function resetRateLimitStoreForTests(): void {
+  rateLimitStore.clear();
+}
+
 // ==================== Preset Limits ====================
 
 export const RATE_LIMITS = {
@@ -90,6 +119,7 @@ export const RATE_LIMITS = {
   redeem: { action: "redeem", maxRequests: 3 },
   buyPlan: { action: "buyPlan", maxRequests: 5 },
   buySemester: { action: "buySemester", maxRequests: 5 },
+  paymentWebhook: { action: "paymentWebhook", maxRequests: 60, windowMs: 60 * 1000 },
   indexPdf: { action: "indexPdf", maxRequests: 3 },
   exportDocx: { action: "exportDocx", maxRequests: 20 },
   exportPdf: { action: "exportPdf", maxRequests: 20 },

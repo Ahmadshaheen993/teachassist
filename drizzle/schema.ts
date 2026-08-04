@@ -1,4 +1,17 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, json, boolean, decimal, date } from "drizzle-orm/mysql-core";
+import {
+  boolean,
+  date,
+  decimal,
+  index,
+  int,
+  json,
+  mysqlEnum,
+  mysqlTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  varchar,
+} from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -164,7 +177,9 @@ export const worksheets = mysqlTable("worksheets", {
 export const purchases = mysqlTable("purchases", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
+  countryId: int("countryId"),
   kind: mysqlEnum("kind", ["single_plan", "semester"]).notNull(),
+  termId: int("termId"),
   quantity: int("quantity").notNull().default(1),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   currency: varchar("currency", { length: 8 }).notNull(),
@@ -172,7 +187,10 @@ export const purchases = mysqlTable("purchases", {
   gatewayRef: varchar("gatewayRef", { length: 255 }),
   status: mysqlEnum("status", ["pending", "paid", "failed", "refunded"]).notNull().default("pending"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (table) => [
+  index("purchases_user_status_idx").on(table.userId, table.status),
+  uniqueIndex("purchases_gateway_ref_unique").on(table.gateway, table.gatewayRef),
+]);
 
 export const planCredits = mysqlTable("plan_credits", {
   userId: int("userId").primaryKey(),
@@ -188,7 +206,39 @@ export const subscriptions = mysqlTable("subscriptions", {
   startsAt: date("startsAt").notNull(),
   endsAt: date("endsAt").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (table) => [
+  uniqueIndex("subscriptions_user_term_unique").on(table.userId, table.termId),
+  uniqueIndex("subscriptions_purchase_unique").on(table.purchaseId),
+]);
+
+export const paymentWebhookEvents = mysqlTable("payment_webhook_events", {
+  id: int("id").autoincrement().primaryKey(),
+  gateway: varchar("gateway", { length: 50 }).notNull(),
+  eventId: varchar("eventId", { length: 255 }).notNull(),
+  purchaseId: int("purchaseId"),
+  payloadHash: varchar("payloadHash", { length: 64 }).notNull(),
+  processedAt: timestamp("processedAt").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("payment_webhook_gateway_event_unique").on(table.gateway, table.eventId),
+  index("payment_webhook_purchase_idx").on(table.purchaseId),
+]);
+
+export const paymentAuditLogs = mysqlTable("payment_audit_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  purchaseId: int("purchaseId"),
+  userId: int("userId"),
+  gateway: varchar("gateway", { length: 50 }).notNull(),
+  status: mysqlEnum("status", ["success", "failed", "rejected", "mismatch", "duplicate"]).notNull(),
+  gatewayRef: varchar("gatewayRef", { length: 255 }),
+  eventId: varchar("eventId", { length: 255 }),
+  errorCode: varchar("errorCode", { length: 100 }),
+  details: json("details"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [
+  index("payment_audit_purchase_idx").on(table.purchaseId),
+  index("payment_audit_user_idx").on(table.userId),
+  index("payment_audit_created_idx").on(table.createdAt),
+]);
 
 // ================= 6) نظام الإحالة =================
 
