@@ -63,13 +63,4 @@ jobs:
       - name: Production build
         run: pnpm build
         env:
-          PAYMENTS_ENABLED: "false"      - name: TypeScript check  
-        run: pnpm check  
-  
-      - name: Run tests  
-        run: pnpm test  
-  
-      - name: Production build  
-        run: pnpm build  
-        env:  
-          PAYMENTS_ENABLED: "false"  
+          PAYMENTS_ENABLED: "false"
