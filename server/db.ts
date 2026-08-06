@@ -6,6 +6,7 @@ import {
   textbooks, units, lessons,
   savedSelections, planTemplates, plans, worksheets,
   purchases, planCredits, subscriptions,
+  paymentAuditLogs, paymentWebhookEvents,
   referralCodes, referralRedemptions, referralRewards,
   resources,
 } from "../drizzle/schema";
@@ -85,6 +86,12 @@ export async function updateUserProfile(userId: number, data: { fullName?: strin
 export async function getActiveCountries() {
   const db = await getDb(); if (!db) return [];
   return db.select().from(countries).where(eq(countries.isActive, true));
+}
+
+export async function getCountryById(countryId: number) {
+  const db = await getDb(); if (!db) return undefined;
+  const result = await db.select().from(countries).where(eq(countries.id, countryId)).limit(1);
+  return result[0];
 }
 
 export async function getAllCountries() {
@@ -341,13 +348,13 @@ export async function deductCredit(userId: number): Promise<void> {
 }
 
 export async function addCredits(userId: number, amount: number): Promise<void> {
+  if (!Number.isInteger(amount) || amount <= 0) throw new Error("Credit amount must be a positive integer");
   const db = await getDb(); if (!db) return;
-  const existing = await db.select().from(planCredits).where(eq(planCredits.userId, userId)).limit(1);
-  if (existing.length > 0) {
-    await db.update(planCredits).set({ balance: existing[0].balance + amount }).where(eq(planCredits.userId, userId));
-  } else {
-    await db.insert(planCredits).values({ userId, balance: amount });
-  }
+  await db.insert(planCredits)
+    .values({ userId, balance: amount })
+    .onDuplicateKeyUpdate({
+      set: { balance: sql`${planCredits.balance} + ${amount}` },
+    });
 }
 
 export async function getSubscriptionStatus(userId: number) {
@@ -496,6 +503,182 @@ export async function getPurchaseById(id: number) {
   return result[0];
 }
 
+export type PaymentGateway = "myfatoorah" | "tap";
+export type PaymentAuditStatus = "success" | "failed" | "rejected" | "mismatch" | "duplicate";
+
+export class PaymentActivationError extends Error {
+  constructor(public readonly code: string) {
+    super(code);
+    this.name = "PaymentActivationError";
+  }
+}
+
+export async function createPaymentAuditLog(data: {
+  purchaseId?: number | null;
+  userId?: number | null;
+  gateway: PaymentGateway;
+  status: PaymentAuditStatus;
+  gatewayRef?: string | null;
+  eventId?: string | null;
+  errorCode?: string | null;
+  details?: Record<string, unknown> | null;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.insert(paymentAuditLogs).values({
+    purchaseId: data.purchaseId ?? null,
+    userId: data.userId ?? null,
+    gateway: data.gateway,
+    status: data.status,
+    gatewayRef: data.gatewayRef ?? null,
+    eventId: data.eventId ?? null,
+    errorCode: data.errorCode ?? null,
+    details: data.details ?? null,
+  });
+}
+
+export type ActivateVerifiedPurchaseInput = {
+  purchaseId: number;
+  gateway: PaymentGateway;
+  gatewayRef: string;
+  eventId: string;
+  payloadHash: string;
+};
+
+export type ActivateVerifiedPurchaseResult = {
+  outcome: "activated" | "already_activated";
+  purchase: typeof purchases.$inferSelect;
+};
+
+/**
+ * Grants the purchased entitlement and marks the purchase paid in one DB transaction.
+ * The gateway HTTP verification must happen before calling this function.
+ */
+export async function activateVerifiedPurchase(
+  input: ActivateVerifiedPurchaseInput,
+): Promise<ActivateVerifiedPurchaseResult> {
+  const db = await getDb();
+  if (!db) throw new PaymentActivationError("DATABASE_UNAVAILABLE");
+
+  return db.transaction(async (tx) => {
+    await tx.insert(paymentWebhookEvents)
+      .values({
+        gateway: input.gateway,
+        eventId: input.eventId,
+        purchaseId: input.purchaseId,
+        payloadHash: input.payloadHash,
+      })
+      .onDuplicateKeyUpdate({
+        set: { eventId: sql`${paymentWebhookEvents.eventId}` },
+      });
+
+    const eventRows = await tx.select().from(paymentWebhookEvents).where(and(
+      eq(paymentWebhookEvents.gateway, input.gateway),
+      eq(paymentWebhookEvents.eventId, input.eventId),
+    )).limit(1).for("update");
+    const event = eventRows[0];
+    if (!event || event.purchaseId !== input.purchaseId || event.payloadHash !== input.payloadHash) {
+      throw new PaymentActivationError("WEBHOOK_EVENT_CONFLICT");
+    }
+
+    const purchaseRows = await tx.select().from(purchases)
+      .where(eq(purchases.id, input.purchaseId))
+      .limit(1)
+      .for("update");
+    const purchase = purchaseRows[0];
+    if (!purchase) throw new PaymentActivationError("PURCHASE_NOT_FOUND");
+    if (purchase.gateway !== input.gateway) {
+      throw new PaymentActivationError("PURCHASE_GATEWAY_MISMATCH");
+    }
+
+    if (purchase.status === "paid") {
+      await tx.insert(paymentAuditLogs).values({
+        purchaseId: purchase.id,
+        userId: purchase.userId,
+        gateway: input.gateway,
+        status: "duplicate",
+        gatewayRef: input.gatewayRef,
+        eventId: input.eventId,
+        errorCode: "ALREADY_ACTIVATED",
+      });
+      return { outcome: "already_activated", purchase };
+    }
+    if (purchase.status !== "pending") {
+      throw new PaymentActivationError("PURCHASE_NOT_PENDING");
+    }
+
+    if (purchase.kind === "single_plan") {
+      const quantity = purchase.quantity ?? 1;
+      if (!Number.isInteger(quantity) || quantity <= 0) {
+        throw new PaymentActivationError("INVALID_PURCHASE_QUANTITY");
+      }
+      await tx.insert(planCredits)
+        .values({ userId: purchase.userId, balance: quantity })
+        .onDuplicateKeyUpdate({
+          set: { balance: sql`${planCredits.balance} + ${quantity}` },
+        });
+    } else if (purchase.kind === "semester") {
+      if (!purchase.termId) throw new PaymentActivationError("PURCHASE_TERM_MISSING");
+
+      // Serialise semester grants for the same user as well as for this purchase.
+      const buyerRows = await tx.select().from(users)
+        .where(eq(users.id, purchase.userId))
+        .limit(1)
+        .for("update");
+      const buyer = buyerRows[0];
+      if (!buyer) throw new PaymentActivationError("BUYER_NOT_FOUND");
+      if (!purchase.countryId) throw new PaymentActivationError("PURCHASE_COUNTRY_MISSING");
+
+      const termRows = await tx.select().from(terms)
+        .where(eq(terms.id, purchase.termId))
+        .limit(1);
+      const term = termRows[0];
+      const today = new Date().toISOString().slice(0, 10);
+      const termEndDate = term?.endDate instanceof Date
+        ? term.endDate.toISOString().slice(0, 10)
+        : String(term?.endDate ?? "").slice(0, 10);
+      if (!term || term.countryId !== purchase.countryId || termEndDate < today) {
+        throw new PaymentActivationError("PURCHASE_TERM_INVALID");
+      }
+
+      await tx.insert(subscriptions).values({
+        userId: purchase.userId,
+        termId: term.id,
+        source: "paid",
+        purchaseId: purchase.id,
+        startsAt: term.startDate,
+        endsAt: term.endDate,
+      }).onDuplicateKeyUpdate({
+        set: { userId: sql`${subscriptions.userId}` },
+      });
+    } else {
+      throw new PaymentActivationError("PURCHASE_KIND_INVALID");
+    }
+
+    await tx.update(purchases).set({
+      status: "paid",
+      gatewayRef: input.gatewayRef,
+    }).where(and(
+      eq(purchases.id, purchase.id),
+      eq(purchases.status, "pending"),
+    ));
+
+    await tx.insert(paymentAuditLogs).values({
+      purchaseId: purchase.id,
+      userId: purchase.userId,
+      gateway: input.gateway,
+      status: "success",
+      gatewayRef: input.gatewayRef,
+      eventId: input.eventId,
+    });
+
+    return {
+      outcome: "activated",
+      purchase: { ...purchase, status: "paid", gatewayRef: input.gatewayRef },
+    };
+  });
+}
+
 // ==================== Terms ====================
 
 // الفصل الحالي لدولة ما، وإن لم يوجد فأقرب فصل قادم
@@ -512,7 +695,21 @@ export async function getCurrentTermForCountry(countryId: number) {
   return upcoming[0];
 }
 
+export async function getTermById(termId: number) {
+  const db = await getDb(); if (!db) return undefined;
+  const result = await db.select().from(terms).where(eq(terms.id, termId)).limit(1);
+  return result[0];
+}
+
 // ==================== Subscriptions ====================
+
+export async function hasSubscriptionForTerm(userId: number, termId: number): Promise<boolean> {
+  const db = await getDb(); if (!db) return false;
+  const result = await db.select({ id: subscriptions.id }).from(subscriptions).where(
+    and(eq(subscriptions.userId, userId), eq(subscriptions.termId, termId))
+  ).limit(1);
+  return result.length > 0;
+}
 
 // إنشاء اشتراك — آمن ضد التكرار: اشتراك واحد لكل (مستخدم، فصل)
 export async function createSubscription(data: {
@@ -524,19 +721,20 @@ export async function createSubscription(data: {
   endsAt: any;
 }): Promise<number | undefined> {
   const db = await getDb(); if (!db) return undefined;
-  const existing = await db.select().from(subscriptions).where(
-    and(eq(subscriptions.userId, data.userId), eq(subscriptions.termId, data.termId))
-  ).limit(1);
-  if (existing.length > 0) return existing[0].id;
-  const result = await db.insert(subscriptions).values({
+  await db.insert(subscriptions).values({
     userId: data.userId,
     termId: data.termId,
     source: data.source,
     purchaseId: data.purchaseId,
     startsAt: data.startsAt,
     endsAt: data.endsAt,
+  }).onDuplicateKeyUpdate({
+    set: { userId: sql`${subscriptions.userId}` },
   });
-  return result[0]?.insertId;
+  const result = await db.select({ id: subscriptions.id }).from(subscriptions).where(
+    and(eq(subscriptions.userId, data.userId), eq(subscriptions.termId, data.termId))
+  ).limit(1);
+  return result[0]?.id;
 }
 
 // ==================== Referrals: الاسترداد والمكافآت ====================

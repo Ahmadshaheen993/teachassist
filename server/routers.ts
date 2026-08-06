@@ -18,7 +18,8 @@ import {
 } from "./googleDrive";
 import { extractPdfText } from "./pdfExtract";
 import { createCheckout } from "./payments";
-import { checkRateLimit, RATE_LIMITS } from "./rateLimiter";
+import { assertPaymentsEnabled, isPaymentsEnabled } from "./paymentConfig";
+import { checkPaymentRateLimit, checkRateLimit, RATE_LIMITS } from "./rateLimiter";
 
 // ==================== Plan Generation System Prompt ====================
 const PLAN_SYSTEM_PROMPT = `أنت خبير مناهج وطرائق تدريس متخصص في إعداد خطط الدروس اليومية وفق النماذج الوزارية الخليجية.
@@ -516,23 +517,50 @@ ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
     purchases: protectedProcedure.query(async ({ ctx }) => {
       return await db.getPurchasesByUser(ctx.user.id);
     }),
+    paymentConfig: protectedProcedure.query(async ({ ctx }) => {
+      const user = await db.getUserById(ctx.user.id);
+      const country = user?.countryId ? await db.getCountryById(user.countryId) : undefined;
+      const term = country?.isActive ? await db.getCurrentTermForCountry(country.id) : undefined;
+      return {
+        enabled: isPaymentsEnabled(),
+        country: country?.isActive ? {
+          id: country.id,
+          nameAr: country.nameAr,
+          currencyCode: country.currencyCode,
+          pricePerPlan: country.pricePerPlan,
+          pricePerSemester: country.pricePerSemester,
+        } : null,
+        semesterTerm: term ? {
+          id: term.id,
+          nameAr: term.nameAr,
+          academicYear: term.academicYear,
+          startDate: term.startDate,
+          endDate: term.endDate,
+        } : null,
+      };
+    }),
     buyPlan: protectedProcedure
       .input(z.object({ gateway: z.enum(["myfatoorah", "tap"]) }))
       .mutation(async ({ ctx, input }) => {
+        assertPaymentsEnabled();
         const userId = ctx.user.id;
-        const country = await db.getActiveCountries();
-        const c = country[0];
-        if (!c) return { success: false, error: "لا توجد دولة نشطة" };
+        checkPaymentRateLimit(userId, ctx.req, RATE_LIMITS.buyPlan);
+        const user = await db.getUserById(userId);
+        if (!user?.countryId) return { success: false, error: "يرجى اختيار الدولة في الملف الشخصي أولاً" };
+        const c = await db.getCountryById(user.countryId);
+        if (!c?.isActive) return { success: false, error: "الدفع غير متاح لدولتك حالياً" };
+        if (Number(c.pricePerPlan) <= 0 || !/^[A-Z]{3,8}$/.test(c.currencyCode)) {
+          return { success: false, error: "إعدادات السعر غير صالحة" };
+        }
         const purchaseId = await db.createPurchase({
-          userId, kind: "single_plan", quantity: 1,
+          userId, countryId: c.id, kind: "single_plan", quantity: 1,
           amount: c.pricePerPlan, currency: c.currencyCode,
           gateway: input.gateway, status: "pending",
         });
+        if (!purchaseId) return { success: false, error: "تعذر إنشاء سجل الشراء" };
         const checkout = await createCheckout({
           gateway: input.gateway,
-          purchaseId: purchaseId!,
-          amount: c.pricePerPlan,
-          currency: c.currencyCode,
+          purchaseId,
           customerName: ctx.user.fullName || ctx.user.name || "Teacher",
           customerEmail: ctx.user.email,
           description: "خطة درس واحدة — مساعد المعلم",
@@ -543,21 +571,30 @@ ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
     buySemester: protectedProcedure
       .input(z.object({ gateway: z.enum(["myfatoorah", "tap"]) }))
       .mutation(async ({ ctx, input }) => {
+        assertPaymentsEnabled();
         const userId = ctx.user.id;
-        checkRateLimit(userId, RATE_LIMITS.buySemester);
-        const country = await db.getActiveCountries();
-        const c = country[0];
-        if (!c) return { success: false, error: "لا توجد دولة نشطة" };
+        checkPaymentRateLimit(userId, ctx.req, RATE_LIMITS.buySemester);
+        const user = await db.getUserById(userId);
+        if (!user?.countryId) return { success: false, error: "يرجى اختيار الدولة في الملف الشخصي أولاً" };
+        const c = await db.getCountryById(user.countryId);
+        if (!c?.isActive) return { success: false, error: "الدفع غير متاح لدولتك حالياً" };
+        if (Number(c.pricePerSemester) <= 0 || !/^[A-Z]{3,8}$/.test(c.currencyCode)) {
+          return { success: false, error: "إعدادات السعر غير صالحة" };
+        }
+        const term = await db.getCurrentTermForCountry(c.id);
+        if (!term) return { success: false, error: "لا يوجد فصل دراسي صالح للبيع حالياً" };
+        if (await db.hasSubscriptionForTerm(userId, term.id)) {
+          return { success: false, error: "لديك اشتراك في هذا الفصل بالفعل" };
+        }
         const purchaseId = await db.createPurchase({
-          userId, kind: "semester", quantity: 1,
+          userId, countryId: c.id, kind: "semester", termId: term.id, quantity: 1,
           amount: c.pricePerSemester, currency: c.currencyCode,
           gateway: input.gateway, status: "pending",
         });
+        if (!purchaseId) return { success: false, error: "تعذر إنشاء سجل الشراء" };
         const checkout = await createCheckout({
           gateway: input.gateway,
-          purchaseId: purchaseId!,
-          amount: c.pricePerSemester,
-          currency: c.currencyCode,
+          purchaseId,
           customerName: ctx.user.fullName || ctx.user.name || "Teacher",
           customerEmail: ctx.user.email,
           description: "اشتراك فصل دراسي — مساعد المعلم",

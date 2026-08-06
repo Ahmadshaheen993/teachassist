@@ -1,12 +1,17 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+import * as db from "./db";
+import { resetRateLimitStoreForTests } from "./rateLimiter";
 
 // Mock db module
 vi.mock("./db", () => ({
   getActiveCountries: vi.fn().mockResolvedValue([
     { id: 1, code: "QA", nameAr: "قطر", currencyCode: "QAR", isActive: true, pricePerPlan: 10, pricePerSemester: 150 },
   ]),
+  getCountryById: vi.fn().mockResolvedValue({
+    id: 1, code: "QA", nameAr: "قطر", currencyCode: "QAR", isActive: true, pricePerPlan: 10, pricePerSemester: 150,
+  }),
   getStagesByCountry: vi.fn().mockResolvedValue([
     { id: 1, countryId: 1, nameAr: "المرحلة الابتدائية", sortOrder: 1 },
   ]),
@@ -68,9 +73,13 @@ vi.mock("./db", () => ({
   countPaidSemesterRedemptions: vi.fn().mockResolvedValue(0),
   getRewardByCode: vi.fn().mockResolvedValue(undefined),
   createReferralReward: vi.fn().mockResolvedValue(undefined),
-  getUserById: vi.fn().mockResolvedValue({ id: 1, name: "Test Teacher", email: "test@example.com" }),
+  getUserById: vi.fn().mockResolvedValue({ id: 1, name: "Test Teacher", email: "test@example.com", countryId: 1 }),
   getPurchaseById: vi.fn().mockResolvedValue(undefined),
-  getCurrentTermForCountry: vi.fn().mockResolvedValue(undefined),
+  getCurrentTermForCountry: vi.fn().mockResolvedValue({
+    id: 10, countryId: 1, nameAr: "الفصل الأول", academicYear: "2026-2027",
+    startDate: new Date("2026-08-01"), endDate: new Date("2027-01-31"),
+  }),
+  hasSubscriptionForTerm: vi.fn().mockResolvedValue(false),
   createSubscription: vi.fn().mockResolvedValue(1),
   getResources: vi.fn().mockResolvedValue([]),
   getAllCountries: vi.fn().mockResolvedValue([]),
@@ -128,6 +137,7 @@ function createAuthContext(): TrpcContext {
       name: "Test Teacher",
       loginMethod: "manus",
       role: "user",
+      countryId: 1,
       createdAt: new Date(),
       updatedAt: new Date(),
       lastSignedIn: new Date(),
@@ -136,6 +146,21 @@ function createAuthContext(): TrpcContext {
     res: {} as any,
   } as TrpcContext;
 }
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  process.env.PAYMENTS_ENABLED = "true";
+  resetRateLimitStoreForTests();
+  vi.mocked(db.getCurrentTermForCountry).mockResolvedValue({
+    id: 10,
+    countryId: 1,
+    nameAr: "الفصل الأول",
+    academicYear: "2026-2027",
+    startDate: new Date("2026-08-01"),
+    endDate: new Date("2027-01-31"),
+  });
+  vi.mocked(db.hasSubscriptionForTerm).mockResolvedValue(false);
+});
 
 function createAdminContext(): TrpcContext {
   const ctx = createAuthContext();
@@ -207,6 +232,22 @@ describe("Subscription Router", () => {
     expect(result.credits).toBe(2);
   });
 
+  it("reports the fail-closed payment configuration", async () => {
+    process.env.PAYMENTS_ENABLED = "false";
+    const caller = appRouter.createCaller(createAuthContext());
+    const result = await caller.subscription.paymentConfig();
+    expect(result.enabled).toBe(false);
+    expect(result.country?.currencyCode).toBe("QAR");
+  });
+
+  it("rejects checkout while payments are disabled", async () => {
+    process.env.PAYMENTS_ENABLED = "false";
+    const caller = appRouter.createCaller(createAuthContext());
+    await expect(caller.subscription.buyPlan({ gateway: "tap" })).rejects.toMatchObject({
+      code: "SERVICE_UNAVAILABLE",
+    });
+  });
+
   it("creates a single plan purchase with checkout URL", async () => {
     const ctx = createAuthContext();
     const caller = appRouter.createCaller(ctx);
@@ -215,12 +256,48 @@ describe("Subscription Router", () => {
     expect(result.paymentUrl).toContain("checkout");
   });
 
+  it("ignores client-supplied price fields and stores the server price", async () => {
+    const caller = appRouter.createCaller(createAuthContext());
+    await caller.subscription.buyPlan({ gateway: "tap", amount: "0.01", currency: "USD" } as any);
+    expect(db.createPurchase).toHaveBeenLastCalledWith(expect.objectContaining({
+      amount: 10,
+      currency: "QAR",
+      countryId: 1,
+    }));
+  });
+
   it("creates a semester purchase with checkout URL", async () => {
     const ctx = createAuthContext();
     const caller = appRouter.createCaller(ctx);
     const result = await caller.subscription.buySemester({ gateway: "tap" });
     expect(result.success).toBe(true);
     expect(result.paymentUrl).toContain("checkout");
+  });
+
+  it("does not create a semester checkout without a valid term", async () => {
+    vi.mocked(db.getCurrentTermForCountry).mockResolvedValueOnce(undefined);
+    const caller = appRouter.createCaller(createAuthContext());
+    const result = await caller.subscription.buySemester({ gateway: "tap" });
+    expect(result).toEqual({ success: false, error: "لا يوجد فصل دراسي صالح للبيع حالياً" });
+  });
+
+  it("does not sell a semester the user already owns", async () => {
+    vi.mocked(db.hasSubscriptionForTerm).mockResolvedValueOnce(true);
+    const caller = appRouter.createCaller(createAuthContext());
+    const result = await caller.subscription.buySemester({ gateway: "tap" });
+    expect(result).toEqual({ success: false, error: "لديك اشتراك في هذا الفصل بالفعل" });
+  });
+
+  it("rate limits single-plan checkout attempts by account and IP", async () => {
+    const ctx = createAuthContext();
+    (ctx.req as any).ip = "203.0.113.10";
+    const caller = appRouter.createCaller(ctx);
+    for (let i = 0; i < 5; i++) {
+      await expect(caller.subscription.buyPlan({ gateway: "myfatoorah" })).resolves.toMatchObject({ success: true });
+    }
+    await expect(caller.subscription.buyPlan({ gateway: "myfatoorah" })).rejects.toMatchObject({
+      code: "TOO_MANY_REQUESTS",
+    });
   });
 });
 
