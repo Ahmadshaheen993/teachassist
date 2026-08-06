@@ -60,6 +60,11 @@ jobs:
       - name: Run tests
         run: pnpm test
 
+      - name: Payment integration safety gates
+        run: pnpm test:payment-integration
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3306/teachassist_ci
+
       - name: Production build
         run: pnpm build
         env:
