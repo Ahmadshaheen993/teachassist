@@ -106,6 +106,9 @@ export default function Subscription() {
               <Button onClick={() => buyPlanMutation.mutate({ gateway: "tap" })} disabled={buyPlanMutation.isPending} variant="outline" className="flex-1">
                 Tap
               </Button>
+              <Button onClick={() => buyPlanMutation.mutate({ gateway: "lemonsqueezy" })} disabled={buyPlanMutation.isPending} variant="outline" className="flex-1">
+                الدفع بالبطاقة 💳
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -137,6 +140,9 @@ export default function Subscription() {
               </Button>
               <Button onClick={() => buySemesterMutation.mutate({ gateway: "tap" })} disabled={buySemesterMutation.isPending} className="flex-1">
                 Tap
+              </Button>
+              <Button onClick={() => buySemesterMutation.mutate({ gateway: "lemonsqueezy" })} disabled={buySemesterMutation.isPending} className="flex-1">
+                الدفع بالبطاقة 💳
               </Button>
             </div>
           </CardContent>

@@ -5,7 +5,8 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import DashboardLayout from "./components/DashboardLayout";
-import Home from "./pages/Home";
+import Home from "@/pages/Home";
+import Login from "@/pages/Login";
 import GeneratePlan from "./pages/GeneratePlan";
 import MyPlans from "./pages/MyPlans";
 import Selections from "./pages/Selections";
@@ -17,6 +18,7 @@ import Admin from "./pages/Admin";
 function Router() {
   return (
     <Switch>
+      <Route path={"/login"} component={Login} />
       <Route path={"/"} component={Home} />
       <Route path={"/generate"} component={GeneratePlan} />
       <Route path={"/my-plans"} component={MyPlans} />

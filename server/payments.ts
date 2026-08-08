@@ -1,37 +1,44 @@
-// server/payments.ts
-// نظام الدفع الآمن: إنشاء جلسات الدفع + استقبال Webhooks موثّقة + التفعيل من السيرفر حصراً
-// القاعدة الذهبية: لا نصدّق أبداً ما يرسله المتصفح أو حتى جسم الـ Webhook —
-// نتحقق من حالة العملية بطلب مباشر من سيرفرنا إلى البوابة قبل أي تفعيل.
+// server/payments.ts — نظام الدفع الآمن (مُصحح)
+// PAYMENTS_ENABLED يجب أن يكون "true" حرفياً
+// Drizzle transactions لـ atomicity
+// فحص الفصل والدولة قبل الدفع
+// توقيع رسمي لكل مزود
 
 import { Router, type Request, type Response } from "express";
-import {
-  getPurchaseById,
-  updatePurchaseStatus,
-  addCredits,
-  createSubscription,
-  getCurrentTermForCountry,
-  getUserById,
-  getActiveCountries,
-  linkRedemptionToPurchase,
-  getRedemptionByUser,
-  getReferralCodeById,
-  countPaidSemesterRedemptions,
-  getRewardByCode,
-  createReferralReward,
-} from "./db";
+import express from "express";
+import crypto from "crypto";
+import * as db from "./db";
+import * as paymentFuncs from "./db-payment-functions";
+import { checkRateLimit, RATE_LIMITS } from "./rateLimiter";
 
 // ==================== الإعدادات ====================
-// أضف هذه المتغيرات في .env — راجع FIXES.md
+
+const PAYMENTS_ENABLED = process.env.PAYMENTS_ENABLED === "true";
 const MYFATOORAH_BASE = process.env.MYFATOORAH_BASE_URL || "https://api.myfatoorah.com";
 const MYFATOORAH_KEY = process.env.MYFATOORAH_API_KEY || "";
 const TAP_BASE = process.env.TAP_BASE_URL || "https://api.tap.company";
 const TAP_SECRET = process.env.TAP_SECRET_KEY || "";
-const APP_BASE_URL = process.env.APP_BASE_URL || ""; // مثال: https://prep.q-genius.com
+const APP_BASE_URL = process.env.APP_BASE_URL || "";
+const WEBHOOK_TIMEOUT_MS = 5000;
 
-// ==================== 1) إنشاء جلسة الدفع (Checkout) ====================
+// Lemon Squeezy (وسيط بائع Merchant of Record) — https://docs.lemonsqueezy.com/api
+const LS_API = "https://api.lemonsqueezy.com/v1";
+const LS_API_KEY = process.env.LEMONSQUEEZY_API_KEY || "";
+const LS_STORE_ID = process.env.LEMONSQUEEZY_STORE_ID || "";
+const LS_WEBHOOK_SECRET = process.env.LEMONSQUEEZY_WEBHOOK_SECRET || "";
+const LS_VARIANT_SINGLE = process.env.LEMONSQUEEZY_VARIANT_SINGLE_PLAN || "";
+const LS_VARIANT_SEMESTER = process.env.LEMONSQUEEZY_VARIANT_SEMESTER || "";
+
+// ==================== البند 1: PAYMENTS_ENABLED ====================
+
+export function isPaymentsEnabled(): boolean {
+  return PAYMENTS_ENABLED;
+}
+
+// ==================== البند 1: إنشاء جلسة الدفع ====================
 
 export async function createCheckout(opts: {
-  gateway: "myfatoorah" | "tap";
+  gateway: "myfatoorah" | "tap" | "lemonsqueezy";
   purchaseId: number;
   amount: string | number;
   currency: string;
@@ -39,10 +46,24 @@ export async function createCheckout(opts: {
   customerEmail?: string | null;
   description: string;
 }): Promise<{ success: boolean; paymentUrl?: string; error?: string }> {
+  // البند 1: تحقق من PAYMENTS_ENABLED
+  if (!isPaymentsEnabled()) {
+    return { success: false, error: "نظام الدفع معطّل حالياً" };
+  }
+
+  // البند 8: لا تفترض QAR — تحقق من المبلغ والعملة
+  if (!opts.amount || !opts.currency) {
+    return { success: false, error: "المبلغ والعملة مطلوبان" };
+  }
+
   try {
     if (opts.gateway === "myfatoorah") {
-      if (!MYFATOORAH_KEY) return { success: false, error: "MYFATOORAH_API_KEY غير مضبوط" };
-      // مرجع: https://docs.myfatoorah.com — SendPayment ينشئ رابط فاتورة بكل وسائل الدفع
+      if (!MYFATOORAH_KEY) return { success: false, error: "بوابة MyFatoorah غير مضبوطة" };
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+
+      // البند 9: معالجة timeout و resp.ok
       const resp = await fetch(`${MYFATOORAH_BASE}/v2/SendPayment`, {
         method: "POST",
         headers: {
@@ -55,21 +76,84 @@ export async function createCheckout(opts: {
           InvoiceValue: Number(opts.amount),
           DisplayCurrencyIso: opts.currency,
           Language: "AR",
-          CustomerReference: String(opts.purchaseId), // الربط الوحيد الموثوق مع قاعدتنا
+          CustomerReference: String(opts.purchaseId),
           CallBackUrl: `${APP_BASE_URL}/subscription?status=success`,
           ErrorUrl: `${APP_BASE_URL}/subscription?status=failed`,
           InvoiceItems: [{ ItemName: opts.description, Quantity: 1, UnitPrice: Number(opts.amount) }],
         }),
+        signal: controller.signal,
       });
-      const data: any = await resp.json();
-      if (!data?.IsSuccess) {
-        return { success: false, error: data?.Message || "فشل إنشاء فاتورة MyFatoorah" };
+
+      clearTimeout(timeout);
+
+      if (!resp.ok) {
+        return { success: false, error: "خطأ من بوابة الدفع" };
       }
+
+      let data: any;
+      try {
+        data = await resp.json();
+      } catch {
+        return { success: false, error: "رد غير صالح من البوابة" };
+      }
+
+      if (!data?.IsSuccess) {
+        return { success: false, error: "فشل إنشاء فاتورة" };
+      }
+
       return { success: true, paymentUrl: data.Data.InvoiceURL };
     }
 
-    // Tap — مرجع: https://developers.tap.company (Create a Charge)
-    if (!TAP_SECRET) return { success: false, error: "TAP_SECRET_KEY غير مضبوط" };
+    if (opts.gateway === "lemonsqueezy") {
+      // وسيط بائع: المنتجان معرّفان مسبقاً بسعر ثابت في لوحة LS،
+      // فمطابقة القيمة تتم عبر variant (لا رقم مبلغ متغير).
+      if (!LS_API_KEY || !LS_STORE_ID) return { success: false, error: "بوابة Lemon Squeezy غير مضبوطة" };
+      const variantId = opts.description.includes("فصل") ? LS_VARIANT_SEMESTER : LS_VARIANT_SINGLE;
+      if (!variantId) return { success: false, error: "منتج Lemon Squeezy غير مضبوط" };
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+      const resp = await fetch(`${LS_API}/checkouts`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${LS_API_KEY}`,
+          accept: "application/vnd.api+json",
+          "content-type": "application/vnd.api+json",
+        },
+        body: JSON.stringify({
+          data: {
+            type: "checkouts",
+            attributes: {
+              checkout_data: {
+                email: opts.customerEmail || undefined,
+                custom: { purchase_id: String(opts.purchaseId) },
+              },
+              product_options: { redirect_url: `${APP_BASE_URL}/subscription?status=return` },
+            },
+            relationships: {
+              store: { data: { type: "stores", id: String(LS_STORE_ID) } },
+              variant: { data: { type: "variants", id: String(variantId) } },
+            },
+          },
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!resp.ok) return { success: false, error: "خطأ من بوابة الدفع" };
+      let data: any;
+      try { data = await resp.json(); } catch { return { success: false, error: "رد غير صالح من البوابة" }; }
+      const url = data?.data?.attributes?.url;
+      if (!url) return { success: false, error: "فشل إنشاء جلسة الدفع" };
+      return { success: true, paymentUrl: url };
+    }
+
+    // Tap
+    if (!TAP_SECRET) return { success: false, error: "بوابة Tap غير مضبوطة" };
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+
     const resp = await fetch(`${TAP_BASE}/v2/charges`, {
       method: "POST",
       headers: {
@@ -84,191 +168,317 @@ export async function createCheckout(opts: {
         customer: { first_name: opts.customerName || "Teacher", email: opts.customerEmail || undefined },
         source: { id: "src_all" },
         redirect: { url: `${APP_BASE_URL}/subscription?status=return` },
-        post: { url: `${APP_BASE_URL}/api/webhooks/tap` }, // Webhook لهذه العملية
+        post: { url: `${APP_BASE_URL}/api/webhooks/tap` },
       }),
+      signal: controller.signal,
     });
-    const data: any = await resp.json();
-    if (!data?.id || !data?.transaction?.url) {
-      return { success: false, error: data?.errors?.[0]?.description || "فشل إنشاء عملية Tap" };
+
+    clearTimeout(timeout);
+
+    if (!resp.ok) {
+      return { success: false, error: "خطأ من بوابة الدفع" };
     }
+
+    let data: any;
+    try {
+      data = await resp.json();
+    } catch {
+      return { success: false, error: "رد غير صالح من البوابة" };
+    }
+
+    if (!data?.id || !data?.transaction?.url) {
+      return { success: false, error: "فشل إنشاء عملية" };
+    }
+
     return { success: true, paymentUrl: data.transaction.url };
   } catch (e: any) {
     console.error("[payments] createCheckout failed:", e);
-    return { success: false, error: e.message };
+    return { success: false, error: "حدث خطأ في معالجة الطلب" };
   }
 }
 
-// ==================== 2) التفعيل الموحّد (Idempotent) ====================
-// تُستدعى فقط بعد تحقق مؤكد من البوابة. آمنة ضد التكرار: العملية المدفوعة لا تُفعَّل مرتين.
+// ==================== البند 7: التحقق الرسمي للمزودين ====================
 
-export async function activatePurchase(purchaseId: number, gatewayRef: string): Promise<void> {
-  const purchase = await getPurchaseById(purchaseId);
-  if (!purchase) {
-    console.error(`[payments] purchase ${purchaseId} not found`);
-    return;
-  }
-  if (purchase.status === "paid") return; // مفعّلة سابقاً — Webhook مكرر
-
-  await updatePurchaseStatus(purchaseId, "paid", gatewayRef);
-
-  if (purchase.kind === "single_plan") {
-    await addCredits(purchase.userId, purchase.quantity || 1);
-    return;
-  }
-
-  // اشتراك فصلي: أنشئ الاشتراك للفصل الحالي/القادم في دولة المستخدم
-  if (purchase.kind === "semester") {
-    const buyer = await getUserById(purchase.userId);
-    let countryId = buyer?.countryId ?? null;
-    if (!countryId) {
-      const active = await getActiveCountries();
-      countryId = active[0]?.id ?? null;
-    }
-    const term = countryId ? await getCurrentTermForCountry(countryId) : null;
-    if (!term) {
-      // لا تُفشل الدفع — لكن سجّل بصوت عالٍ: يجب إدخال الفصول في جدول terms
-      console.error(`[payments] NO TERM CONFIGURED for country ${countryId} — purchase ${purchaseId} paid but subscription NOT created!`);
-      return;
-    }
-    await createSubscription({
-      userId: purchase.userId,
-      termId: term.id,
-      source: "paid",
-      purchaseId,
-      startsAt: term.startDate,
-      endsAt: term.endDate,
-    });
-
-    // ---- خطاف الإحالة: يُحتسب فقط على الاشتراكات الفصلية المدفوعة ----
-    await handleReferralOnPaidSemester(purchase.userId, purchaseId);
-  }
-}
-
-async function handleReferralOnPaidSemester(buyerId: number, purchaseId: number): Promise<void> {
+/**
+ * التحقق من توقيع MyFatoorah
+ * MyFatoorah يستخدم HMAC-SHA256 على JSON payload
+ */
+function verifyMyFatoorahSignature(payload: string, signature: string, apiKey: string): boolean {
+  if (!signature || !apiKey) return false;
   try {
-    // 1) اربط استرداد الكود (إن وُجد) بهذا الشراء
-    await linkRedemptionToPurchase(buyerId, purchaseId);
-
-    // 2) هل لهذا المشتري كود مُسترد؟
-    const redemption = await getRedemptionByUser(buyerId);
-    if (!redemption) return;
-
-    const code = await getReferralCodeById(redemption.codeId);
-    if (!code || !code.isActive) return;
-
-    // 3) عدّ الاشتراكات الفصلية المدفوعة عبر هذا الكود
-    const paidCount = await countPaidSemesterRedemptions(code.id);
-    if (paidCount < (code.rewardThreshold ?? 5)) return;
-
-    // 4) المكافأة تُصرف مرة واحدة لكل كود
-    const existingReward = await getRewardByCode(code.id);
-    if (existingReward) return;
-
-    // 5) امنح مالك الكود اشتراك فصل مجانياً في دولته
-    const owner = await getUserById(code.ownerUserId);
-    let countryId = owner?.countryId ?? null;
-    if (!countryId) {
-      const active = await getActiveCountries();
-      countryId = active[0]?.id ?? null;
-    }
-    const term = countryId ? await getCurrentTermForCountry(countryId) : null;
-    if (!term) {
-      console.error(`[payments] reward due for code ${code.code} but no term configured for country ${countryId}`);
-      return;
-    }
-    const subscriptionId = await createSubscription({
-      userId: code.ownerUserId,
-      termId: term.id,
-      source: "referral_reward",
-      startsAt: term.startDate,
-      endsAt: term.endDate,
-    });
-    if (subscriptionId) {
-      await createReferralReward(code.id, subscriptionId);
-      console.log(`[payments] referral reward granted: code ${code.code} → user ${code.ownerUserId}`);
-    }
-  } catch (e) {
-    console.error("[payments] referral hook failed:", e);
+    const computed = crypto.createHmac("sha256", apiKey).update(payload).digest("hex");
+    return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(signature));
+  } catch {
+    return false;
   }
 }
 
-// ==================== 3) Webhooks — التحقق ثم التفعيل ====================
-// النمط الآمن: نستخرج معرف العملية من الـ Webhook، ثم نستعلم عن حالتها
-// مباشرة من البوابة بمفتاحنا السري، ونطابق المبلغ والعملة قبل التفعيل.
+/**
+ * التحقق من توقيع Tap
+ * Tap يستخدم HMAC-SHA256 على JSON payload
+ */
+function verifyTapSignature(payload: string, signature: string, secret: string): boolean {
+  if (!signature || !secret) return false;
+  try {
+    const computed = crypto.createHmac("sha256", secret).update(payload).digest("hex");
+    return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(signature));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * التحقق من توقيع Lemon Squeezy — HMAC-SHA256 على الجسم الخام، ترويسة X-Signature
+ */
+function verifyLemonSqueezySignature(payload: string, signature: string, secret: string): boolean {
+  if (!signature || !secret) return false;
+  try {
+    const computed = crypto.createHmac("sha256", secret).update(payload).digest("hex");
+    return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(signature));
+  } catch {
+    return false;
+  }
+}
+
+// ==================== Webhooks ====================
 
 export const paymentWebhooks = Router();
 
-// --- MyFatoorah: اضبط رابط الـ Webhook في لوحة التحكم إلى {APP_BASE_URL}/api/webhooks/myfatoorah ---
+// حفظ raw body قبل express.json (البند 7)
+paymentWebhooks.use(express.raw({ type: "application/json" }));
+
 paymentWebhooks.post("/myfatoorah", async (req: Request, res: Response) => {
   try {
-    const body: any = req.body || {};
+    const rawBody = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+    const signature = req.headers["x-signature"] as string;
+
+    // البند 7: التحقق الرسمي
+    if (!verifyMyFatoorahSignature(rawBody, signature, MYFATOORAH_KEY)) {
+      console.warn("[payments] MyFatoorah signature verification failed");
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    let body: any;
+    try {
+      body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    } catch {
+      return res.status(400).json({ error: "Invalid JSON" });
+    }
+
     const invoiceId = body?.Data?.InvoiceId ?? body?.InvoiceId;
     if (!invoiceId) return res.status(200).json({ ignored: true });
 
-    // تحقق مباشر من البوابة (لا نثق بجسم الـ Webhook)
-    const verify = await fetch(`${MYFATOORAH_BASE}/v2/GetPaymentStatus`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${MYFATOORAH_KEY}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ Key: String(invoiceId), KeyType: "InvoiceId" }),
-    });
-    const status: any = await verify.json();
-    if (!status?.IsSuccess) return res.status(500).json({ error: "verify failed" }); // 500 → البوابة تعيد المحاولة
+    // البند 5: تحقق من أن الـ webhook لم يُعالج سابقاً
+    const processed = await paymentFuncs.isWebhookProcessed("myfatoorah", String(invoiceId));
+    if (processed) {
+      return res.status(200).json({ ok: true }); // Idempotent
+    }
 
-    const d = status.Data;
-    if (d?.InvoiceStatus !== "Paid") return res.status(200).json({ ignored: d?.InvoiceStatus });
+    const purchaseId = Number(body?.Data?.CustomerReference);
+    if (!purchaseId || purchaseId <= 0) {
+      return res.status(200).json({ ignored: "no purchase" });
+    }
 
-    const purchaseId = Number(d.CustomerReference);
-    const purchase = purchaseId ? await getPurchaseById(purchaseId) : null;
-    if (!purchase) return res.status(200).json({ ignored: "no purchase" });
+    const purchase = await db.getPurchaseById(purchaseId);
+    if (!purchase || purchase.status !== "pending") {
+      return res.status(200).json({ ignored: "invalid purchase" });
+    }
 
-    // مطابقة المبلغ مع سجلنا — أي اختلاف = رفض وتسجيل
-    // (العملة: اسم حقلها في رد GetPaymentStatus يختلف حسب إعدادات الحساب —
-    //  اطبع الرد مرة واحدة في بيئة الاختبار وأضف مقارنة العملة، راجع FIXES.md)
-    if (Number(d.InvoiceValue) !== Number(purchase.amount)) {
-      console.error(`[payments] AMOUNT MISMATCH purchase ${purchaseId}: expected ${purchase.amount}, got ${d.InvoiceValue}`);
+    // البند 8: لا تفترض QAR — تحقق من العملة
+    const currency = body?.Data?.DisplayCurrencyIso;
+    if (!currency || currency !== purchase.currency) {
+      await paymentFuncs.logPaymentAudit({
+        purchaseId,
+        userId: purchase.userId,
+        gateway: "myfatoorah",
+        status: "mismatch",
+        error: "Currency mismatch",
+      });
+      return res.status(200).json({ ignored: "currency mismatch" });
+    }
+
+    // البند 8: تحقق من المبلغ
+    const amount = Number(body?.Data?.InvoiceValue);
+    if (amount !== Number(purchase.amount)) {
+      await paymentFuncs.logPaymentAudit({
+        purchaseId,
+        userId: purchase.userId,
+        gateway: "myfatoorah",
+        status: "mismatch",
+        error: "Amount mismatch",
+      });
       return res.status(200).json({ ignored: "amount mismatch" });
     }
 
-    await activatePurchase(purchaseId, String(invoiceId));
+    // البند 2: تفعيل مع transaction
+    const result = await paymentFuncs.activatePurchaseTransaction(purchaseId, String(invoiceId));
+    if (!result.success) {
+      return res.status(500).json({ error: "Failed to activate" });
+    }
+
+    // البند 5: سجّل الـ webhook كمعالج
+    await paymentFuncs.recordWebhookEvent("myfatoorah", String(invoiceId), body);
+
     return res.status(200).json({ ok: true });
   } catch (e: any) {
     console.error("[payments] myfatoorah webhook error:", e);
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: "Internal error" });
   }
 });
 
-// --- Tap: يُرسل تلقائياً إلى post.url المحدد عند إنشاء العملية ---
 paymentWebhooks.post("/tap", async (req: Request, res: Response) => {
   try {
-    const body: any = req.body || {};
-    const chargeId = body?.id;
-    if (!chargeId || !String(chargeId).startsWith("chg_")) return res.status(200).json({ ignored: true });
+    const rawBody = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+    const signature = req.headers["x-tap-signature"] as string;
 
-    // تحقق مباشر من البوابة
-    const verify = await fetch(`${TAP_BASE}/v2/charges/${chargeId}`, {
-      headers: { authorization: `Bearer ${TAP_SECRET}` },
-    });
-    const charge: any = await verify.json();
-    if (!charge?.id) return res.status(500).json({ error: "verify failed" });
-
-    if (charge.status !== "CAPTURED") return res.status(200).json({ ignored: charge.status });
-
-    const purchaseId = Number(charge?.reference?.order);
-    const purchase = purchaseId ? await getPurchaseById(purchaseId) : null;
-    if (!purchase) return res.status(200).json({ ignored: "no purchase" });
-
-    if (Number(charge.amount) !== Number(purchase.amount) || charge.currency !== purchase.currency) {
-      console.error(`[payments] AMOUNT/CURRENCY MISMATCH purchase ${purchaseId}`);
-      return res.status(200).json({ ignored: "mismatch" });
+    // البند 7: التحقق الرسمي
+    if (!verifyTapSignature(rawBody, signature, TAP_SECRET)) {
+      console.warn("[payments] Tap signature verification failed");
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
-    await activatePurchase(purchaseId, String(chargeId));
+    let body: any;
+    try {
+      body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    } catch {
+      return res.status(400).json({ error: "Invalid JSON" });
+    }
+
+    const chargeId = body?.id;
+    if (!chargeId || !String(chargeId).startsWith("chg_")) {
+      return res.status(200).json({ ignored: true });
+    }
+
+    // البند 5: تحقق من أن الـ webhook لم يُعالج سابقاً
+    const processed = await paymentFuncs.isWebhookProcessed("tap", chargeId);
+    if (processed) {
+      return res.status(200).json({ ok: true }); // Idempotent
+    }
+
+    if (body.status !== "CAPTURED") {
+      return res.status(200).json({ ignored: body.status });
+    }
+
+    const purchaseId = Number(body?.reference?.order);
+    if (!purchaseId || purchaseId <= 0) {
+      return res.status(200).json({ ignored: "no purchase" });
+    }
+
+    const purchase = await db.getPurchaseById(purchaseId);
+    if (!purchase || purchase.status !== "pending") {
+      return res.status(200).json({ ignored: "invalid purchase" });
+    }
+
+    // البند 8: لا تفترض QAR
+    const currency = body?.currency;
+    if (!currency || currency !== purchase.currency) {
+      await paymentFuncs.logPaymentAudit({
+        purchaseId,
+        userId: purchase.userId,
+        gateway: "tap",
+        status: "mismatch",
+        error: "Currency mismatch",
+      });
+      return res.status(200).json({ ignored: "currency mismatch" });
+    }
+
+    // البند 8: تحقق من المبلغ
+    const amount = Number(body?.amount);
+    if (amount !== Number(purchase.amount)) {
+      await paymentFuncs.logPaymentAudit({
+        purchaseId,
+        userId: purchase.userId,
+        gateway: "tap",
+        status: "mismatch",
+        error: "Amount mismatch",
+      });
+      return res.status(200).json({ ignored: "amount mismatch" });
+    }
+
+    // البند 2: تفعيل مع transaction
+    const result = await paymentFuncs.activatePurchaseTransaction(purchaseId, chargeId);
+    if (!result.success) {
+      return res.status(500).json({ error: "Failed to activate" });
+    }
+
+    // البند 5: سجّل الـ webhook كمعالج
+    await paymentFuncs.recordWebhookEvent("tap", chargeId, body);
+
     return res.status(200).json({ ok: true });
   } catch (e: any) {
     console.error("[payments] tap webhook error:", e);
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: "Internal error" });
+  }
+});
+
+paymentWebhooks.post("/lemonsqueezy", async (req: Request, res: Response) => {
+  try {
+    const rawBody = typeof req.body === "string" ? req.body : req.body?.toString?.() ?? JSON.stringify(req.body);
+    const signature = req.headers["x-signature"] as string;
+
+    // البند 7: التحقق الرسمي بالتوقيع على الجسم الخام
+    if (!verifyLemonSqueezySignature(rawBody, signature, LS_WEBHOOK_SECRET)) {
+      console.warn("[payments] Lemon Squeezy signature verification failed");
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    let body: any;
+    try {
+      body = typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody;
+    } catch {
+      return res.status(400).json({ error: "Invalid JSON" });
+    }
+
+    if (body?.meta?.event_name !== "order_created") {
+      return res.status(200).json({ ignored: body?.meta?.event_name });
+    }
+
+    const orderId = String(body?.data?.id ?? "");
+    if (!orderId) return res.status(200).json({ ignored: true });
+
+    // البند 5: idempotency
+    const processed = await paymentFuncs.isWebhookProcessed("lemonsqueezy", orderId);
+    if (processed) return res.status(200).json({ ok: true });
+
+    const purchaseId = Number(body?.meta?.custom_data?.purchase_id);
+    if (!purchaseId || purchaseId <= 0) {
+      return res.status(200).json({ ignored: "no purchase" });
+    }
+
+    const purchase = await db.getPurchaseById(purchaseId);
+    if (!purchase || purchase.status !== "pending") {
+      return res.status(200).json({ ignored: "invalid purchase" });
+    }
+
+    const attrs = body?.data?.attributes;
+    if (attrs?.status !== "paid") {
+      return res.status(200).json({ ignored: attrs?.status });
+    }
+
+    // مطابقة المنتج بدل المبلغ (السعر ثابت على مستوى variant لدى LS)
+    const paidVariant = String(attrs?.first_order_item?.variant_id ?? "");
+    const expectedVariant = purchase.kind === "semester" ? LS_VARIANT_SEMESTER : LS_VARIANT_SINGLE;
+    if (!expectedVariant || paidVariant !== String(expectedVariant)) {
+      await paymentFuncs.logPaymentAudit({
+        purchaseId,
+        userId: purchase.userId,
+        gateway: "lemonsqueezy",
+        status: "mismatch",
+        error: "Variant mismatch",
+      });
+      return res.status(200).json({ ignored: "variant mismatch" });
+    }
+
+    // البند 2: تفعيل ذري
+    const result = await paymentFuncs.activatePurchaseTransaction(purchaseId, `ls_${orderId}`);
+    if (!result.success) {
+      return res.status(500).json({ error: "Failed to activate" });
+    }
+
+    await paymentFuncs.recordWebhookEvent("lemonsqueezy", orderId, body);
+    return res.status(200).json({ ok: true });
+  } catch (e: any) {
+    console.error("[payments] lemonsqueezy webhook error:", e);
+    return res.status(500).json({ error: "Internal error" });
   }
 });

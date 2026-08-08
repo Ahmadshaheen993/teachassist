@@ -517,7 +517,7 @@ ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
       return await db.getPurchasesByUser(ctx.user.id);
     }),
     buyPlan: protectedProcedure
-      .input(z.object({ gateway: z.enum(["myfatoorah", "tap"]) }))
+      .input(z.object({ gateway: z.enum(["myfatoorah", "tap", "lemonsqueezy"]) }))
       .mutation(async ({ ctx, input }) => {
         const userId = ctx.user.id;
         const country = await db.getActiveCountries();
@@ -541,7 +541,7 @@ ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
         return { success: true, purchaseId, paymentUrl: checkout.paymentUrl };
       }),
     buySemester: protectedProcedure
-      .input(z.object({ gateway: z.enum(["myfatoorah", "tap"]) }))
+      .input(z.object({ gateway: z.enum(["myfatoorah", "tap", "lemonsqueezy"]) }))
       .mutation(async ({ ctx, input }) => {
         const userId = ctx.user.id;
         checkRateLimit(userId, RATE_LIMITS.buySemester);

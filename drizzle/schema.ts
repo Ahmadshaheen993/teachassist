@@ -170,6 +170,7 @@ export const purchases = mysqlTable("purchases", {
   currency: varchar("currency", { length: 8 }).notNull(),
   gateway: varchar("gateway", { length: 50 }).notNull(),
   gatewayRef: varchar("gatewayRef", { length: 255 }),
+  webhookId: varchar("webhookId", { length: 255 }).unique(),
   status: mysqlEnum("status", ["pending", "paid", "failed", "refunded"]).notNull().default("pending"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
@@ -253,3 +254,47 @@ export type ReferralCode = typeof referralCodes.$inferSelect;
 export type ReferralRedemption = typeof referralRedemptions.$inferSelect;
 export type ReferralReward = typeof referralRewards.$inferSelect;
 export type Resource = typeof resources.$inferSelect;
+
+// ================= 5b) Webhook Events Log =================
+
+export const webhookEvents = mysqlTable("webhook_events", {
+  id: int("id").autoincrement().primaryKey(),
+  gateway: varchar("gateway", { length: 50 }).notNull(),
+  eventId: varchar("eventId", { length: 255 }).notNull(),
+  payload: json("payload"),
+  status: mysqlEnum("status", ["received", "processed", "failed"]).notNull().default("received"),
+  error: text("error"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ================= 5c) Payment Audit Logs =================
+
+export const paymentAuditLogs = mysqlTable("payment_audit_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  purchaseId: int("purchaseId"),
+  userId: int("userId"),
+  gateway: varchar("gateway", { length: 50 }).notNull(),
+  status: mysqlEnum("status", ["success", "failed", "rejected", "mismatch"]).notNull(),
+  gatewayRef: varchar("gatewayRef", { length: 255 }),
+  error: text("error"),
+  details: json("details"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type WebhookEvent = typeof webhookEvents.$inferSelect;
+export type PaymentAuditLog = typeof paymentAuditLogs.$inferSelect;
+
+// ================= 7) OTP Authentication (AUTH_SPEC_V2) =================
+
+export const otpCodes = mysqlTable("otp_codes", {
+  id: int("id").autoincrement().primaryKey(),
+  email: varchar("email", { length: 320 }).notNull(),
+  codeHash: varchar("codeHash", { length: 64 }).notNull(),
+  purpose: mysqlEnum("purpose", ["login", "register"]).notNull().default("login"),
+  expiresAt: timestamp("expiresAt").notNull(),
+  consumedAt: timestamp("consumedAt"),
+  attempts: int("attempts").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type OtpCode = typeof otpCodes.$inferSelect;

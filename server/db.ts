@@ -488,6 +488,14 @@ export async function getUserById(id: number) {
   return result[0];
 }
 
+// ==================== Auth V2: Email Lookup ====================
+
+export async function getUserByEmail(email: string) {
+  const db = await getDb(); if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return result[0];
+}
+
 // ==================== Purchases ====================
 
 export async function getPurchaseById(id: number) {

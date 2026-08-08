@@ -6,6 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { paymentWebhooks } from "../payments";
+import { requestOtp, verifyOtp } from "../auth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -32,13 +33,17 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+  // Payment webhooks FIRST — need the raw body for HMAC signature verification,
+  // before the global JSON parser consumes it. (MyFatoorah + Tap + Lemon Squeezy)
+  app.use("/api/webhooks", paymentWebhooks);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
-  // Payment webhooks (MyFatoorah + Tap)
-  app.use("/api/webhooks", paymentWebhooks);
+  // Auth V2: Email + OTP
+  app.post("/api/auth/request-otp", requestOtp);
+  app.post("/api/auth/verify-otp", verifyOtp);
   // tRPC API
   app.use(
     "/api/trpc",
