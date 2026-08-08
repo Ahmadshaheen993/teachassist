@@ -2,16 +2,10 @@
 nixPkgs = ["nodejs_22", "pnpm", "libreoffice", "fontconfig"]
 
 [phases.install]
-cmds = ["pnpm install --frozen-lockfile"]
+cmds = ["pnpm install"]
 
 [phases.build]
-cmds = [
-  "pnpm build",
-  "fc-cache -f"
-]
+cmds = ["pnpm build", "fc-cache -f"]
 
 [start]
 cmd = "node dist/index.js"
-
-[phases.install]
-cmds = ["pnpm install"]

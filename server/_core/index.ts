@@ -9,7 +9,7 @@ import { paymentWebhooks } from "../payments";
 import { requestOtp, verifyOtp } from "../auth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { serveStatic, setupVite } from "./vite";
+
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -54,9 +54,9 @@ async function startServer() {
   );
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
-    await setupVite(app, server);
+    await (await import("./vite")).setupVite(app, server);
   } else {
-    serveStatic(app);
+    (await import("./vite")).serveStatic(app);
   }
 
   const preferredPort = parseInt(process.env.PORT || "3000");
