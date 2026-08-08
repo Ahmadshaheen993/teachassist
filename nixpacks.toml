@@ -12,3 +12,6 @@ cmds = [
 
 [start]
 cmd = "node dist/index.js"
+
+[phases.install]
+cmds = ["pnpm install"]
