@@ -17,60 +17,63 @@
     }
     body { margin: 0; }
     a { color: #F57005; }
-    a:hover { color: #C25A04; }
+    a:hover { color: #FF9A4D; }
   </style>
 </helmet>
 
-<div dir="rtl" style="width: 1080px; height: 1080px; position: relative; overflow: hidden; background: #F3F2F9; font-family: 'QG Display', 'DIN Next LT Arabic', 'Tajawal', system-ui, sans-serif; box-sizing: border-box;">
+<div lang="ar" dir="rtl" style="width: 1080px; height: 1080px; position: relative; overflow: hidden; background: #F3F2F9; font-family: 'QG Display', 'DIN Next LT Arabic', 'Tajawal', system-ui, sans-serif; box-sizing: border-box;">
 
   <!-- atmosphere -->
   <div style="position: absolute; top: -300px; left: -180px; width: 680px; height: 680px; border-radius: 50%; background: radial-gradient(circle, rgba(179,173,225,0.60) 0%, rgba(179,173,225,0) 70%);"></div>
   <div style="position: absolute; bottom: -280px; right: -200px; width: 640px; height: 640px; border-radius: 50%; background: radial-gradient(circle, rgba(0,147,137,0.20) 0%, rgba(0,147,137,0) 70%);"></div>
 
-  <!-- navy footer band -->
+  <!-- navy footer band: height must stay in sync with the footer row below (208px) -->
   <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 208px; background: #05092D;"></div>
 
   <div style="position: relative; height: 100%; box-sizing: border-box; display: flex; flex-direction: column;">
 
     <!-- upper (light) -->
-    <div style="flex-grow: 1; box-sizing: border-box; padding: 72px 72px 40px; display: flex; flex-direction: column; justify-content: space-between;">
+    <div style="flex-grow: 1; box-sizing: border-box; padding: 72px 72px 44px; display: flex; flex-direction: column; justify-content: space-between;">
 
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 24px;">
         <span style="font-size: 34px; font-weight: 900; color: #13194F; letter-spacing: -0.4px; direction: ltr;">Q-Genius</span>
         <div style="display: flex; align-items: center; gap: 12px; padding: 12px 22px; border-radius: 999px; background: #FFFFFF; border: 1px solid rgba(19,25,79,0.12);">
-          <span style="display: block; width: 9px; height: 9px; border-radius: 50%; background: #F57005;"></span>
-          <span style="font-size: 25px; font-weight: 500; color: #344065;">المنهج القطري · من الأول للثاني عشر</span>
+          <span style="display: block; width: 9px; height: 9px; flex-shrink: 0; border-radius: 50%; background: #F57005;"></span>
+          <span style="font-size: 25px; font-weight: 500; color: #344065;">المنهج القطري · من الأول إلى الثاني عشر</span>
         </div>
       </div>
 
       <div style="display: flex; flex-direction: column; gap: 30px;">
         <div style="display: flex; flex-direction: column; gap: 2px;">
-          <span style="font-size: 92px; font-weight: 900; line-height: 1.18; color: #13194F; letter-spacing: -1px;">كشف درجات آخر فصل…</span>
-          <span style="font-size: 92px; font-weight: 900; line-height: 1.18; color: #F57005; letter-spacing: -1px;">كان ممكن يكون أحسن؟</span>
+          <span style="font-size: 86px; font-weight: 900; line-height: 1.2; color: #13194F;">درجات آخر فصل…</span>
+          <span style="font-size: 86px; font-weight: 900; line-height: 1.2; color: #F57005;">ممكن تكون أحسن؟</span>
         </div>
-        <span style="font-size: 36px; font-weight: 500; line-height: 1.5; color: #344065; max-width: 860px; text-wrap: pretty;">الفرق مو في الذكاء — الفرق إن في مدرّس شرح له الدرس بطريقته هو.</span>
+        <span style="font-size: 34px; font-weight: 500; line-height: 1.5; color: #344065; max-width: 900px;">الفرق مو في الذكاء — الفرق في المدرّس.</span>
       </div>
 
       <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px;">
-        <div style="display: flex; align-items: center; gap: 16px; padding: 24px 26px; border-radius: 20px; background: #FFFFFF; border: 1px solid rgba(19,25,79,0.10);">
-          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#009389" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+        <div style="display: flex; flex-direction: column; gap: 10px; padding: 24px 22px; border-radius: 22px; background: #FFFFFF; border: 1px solid rgba(19,25,79,0.10);">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#009389" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
             <circle cx="12" cy="8" r="3.2"></circle>
             <path d="M5.4 19.4a6.8 6.8 0 0 1 13.2 0"></path>
           </svg>
-          <span style="font-size: 28px; font-weight: 700; line-height: 1.3; color: #13194F;">مدرّسين معتمدين</span>
+          <span style="font-size: 27px; font-weight: 700; line-height: 1.3; color: #13194F;">مدرّسين معتمدين</span>
+          <span style="font-size: 24px; font-weight: 500; line-height: 1.4; color: #697585;">على المنهج القطري</span>
         </div>
-        <div style="display: flex; align-items: center; gap: 16px; padding: 24px 26px; border-radius: 20px; background: #FFFFFF; border: 1px solid rgba(19,25,79,0.10);">
-          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#4F5DE4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+        <div style="display: flex; flex-direction: column; gap: 10px; padding: 24px 22px; border-radius: 22px; background: #FFFFFF; border: 1px solid rgba(19,25,79,0.10);">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#4F5DE4" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
             <circle cx="12" cy="12" r="8.6"></circle>
             <path d="M12 7.2V12l3.2 2"></path>
           </svg>
-          <span style="font-size: 28px; font-weight: 700; line-height: 1.3; color: #13194F;">أوقات مرنة</span>
+          <span style="font-size: 27px; font-weight: 700; line-height: 1.3; color: #13194F;">أوقات مرنة</span>
+          <span style="font-size: 24px; font-weight: 500; line-height: 1.4; color: #697585;">تختار وقتك انت</span>
         </div>
-        <div style="display: flex; align-items: center; gap: 16px; padding: 24px 26px; border-radius: 20px; background: #FFFFFF; border: 1px solid rgba(19,25,79,0.10);">
-          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#F57005" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+        <div style="display: flex; flex-direction: column; gap: 10px; padding: 24px 22px; border-radius: 22px; background: #FFFFFF; border: 1px solid rgba(19,25,79,0.10);">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#F57005" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
             <path d="M4 19.2V13"></path><path d="M10 19.2V8.4"></path><path d="M16 19.2v-8"></path><path d="M21 19.2V5.2"></path>
           </svg>
-          <span style="font-size: 28px; font-weight: 700; line-height: 1.3; color: #13194F;">متابعة مستمرة</span>
+          <span style="font-size: 27px; font-weight: 700; line-height: 1.3; color: #13194F;">متابعة مستمرة</span>
+          <span style="font-size: 24px; font-weight: 500; line-height: 1.4; color: #697585;">تقرير بعد كل حصّة</span>
         </div>
       </div>
 
@@ -79,13 +82,13 @@
     <!-- lower (navy cta band) -->
     <div style="height: 208px; flex-shrink: 0; box-sizing: border-box; padding: 0 72px; display: flex; align-items: center; justify-content: space-between; gap: 28px;">
       <div style="display: flex; align-items: center; gap: 16px; padding: 24px 42px; border-radius: 999px; background: #F57005;">
-        <span style="font-size: 36px; font-weight: 900; color: #05092D; letter-spacing: -0.3px;">احجز حصتك الحين</span>
-        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#05092D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <span style="font-size: 36px; font-weight: 900; color: #05092D;">احجز حصّتك الحين</span>
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#05092D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
           <path d="M19 12H5"></path><path d="M11 18l-6-6 6-6"></path>
         </svg>
       </div>
       <div style="display: flex; flex-direction: column; gap: 6px; align-items: flex-end;">
-        <img src="logo.png" alt="Q-Genius" style="height: 46px; width: auto; display: block;">
+        <img src="logo.png" alt="Q-Genius" style="height: 46px; width: auto; flex-shrink: 0; display: block;">
         <span style="font-size: 30px; font-weight: 700; color: #B3ADE1; letter-spacing: 0.5px; direction: ltr;">q-genius.com</span>
       </div>
     </div>

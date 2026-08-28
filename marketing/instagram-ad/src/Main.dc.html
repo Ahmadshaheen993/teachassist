@@ -1,0 +1,107 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    @font-face {
+      font-family: "QG Display";
+      src: url(data:font/woff2;base64,__FONT_B64__) format("woff2");
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: block;
+    }
+    body { margin: 0; }
+    a { color: #F57005; }
+    a:hover { color: #FF9A4D; }
+  </style>
+</helmet>
+
+<div lang="ar" dir="rtl" style="width: 1080px; height: 1080px; position: relative; overflow: hidden; background: #05092D; font-family: 'QG Display', 'DIN Next LT Arabic', 'Tajawal', system-ui, sans-serif; box-sizing: border-box;">
+
+  <!-- atmosphere -->
+  <div style="position: absolute; top: -320px; right: -220px; width: 760px; height: 760px; border-radius: 50%; background: radial-gradient(circle, rgba(79,93,228,0.42) 0%, rgba(79,93,228,0) 68%);"></div>
+  <div style="position: absolute; bottom: -300px; left: -240px; width: 720px; height: 720px; border-radius: 50%; background: radial-gradient(circle, rgba(0,147,137,0.34) 0%, rgba(0,147,137,0) 68%);"></div>
+  <div style="position: absolute; inset: 0; background-image: linear-gradient(rgba(179,173,225,0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(179,173,225,0.055) 1px, transparent 1px); background-size: 90px 90px;"></div>
+  <div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5,9,45,0.30) 0%, rgba(5,9,45,0) 34%, rgba(5,9,45,0.72) 100%);"></div>
+
+  <!-- content -->
+  <div style="position: relative; height: 100%; box-sizing: border-box; padding: 72px; display: flex; flex-direction: column; justify-content: space-between;">
+
+    <!-- header -->
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 24px;">
+      <img src="logo.png" alt="Q-Genius" style="height: 58px; width: auto; flex-shrink: 0; display: block;">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 12px 22px; border-radius: 999px; border: 1px solid rgba(179,173,225,0.34); background: rgba(19,25,79,0.55);">
+        <span style="display: block; width: 9px; height: 9px; flex-shrink: 0; border-radius: 50%; background: #009389;"></span>
+        <span style="font-size: 25px; font-weight: 500; color: #ACB3CD;">المنهج القطري · من الأول إلى الثاني عشر</span>
+      </div>
+    </div>
+
+    <!-- headline -->
+    <div style="display: flex; flex-direction: column; gap: 26px;">
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <span style="font-size: 108px; font-weight: 900; line-height: 1.2; color: #FFFFFF;">اختر مدرّسك.</span>
+        <span style="font-size: 108px; font-weight: 900; line-height: 1.2; color: #FFFFFF;">اختر وقتك.</span>
+        <span style="font-size: 108px; font-weight: 900; line-height: 1.2; color: #F57005;">واختر درجاتك.</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 18px;">
+        <span style="display: block; width: 6px; height: 44px; flex-shrink: 0; border-radius: 3px; background: #009389;"></span>
+        <span style="font-size: 29px; font-weight: 500; line-height: 1.45; color: #B3ADE1; max-width: 900px;">حصص VIP فردية أونلاين مع مدرّسين معتمدين للمنهج القطري</span>
+      </div>
+    </div>
+
+    <!-- feature cards -->
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px;">
+
+      <div style="display: flex; flex-direction: column; gap: 18px; padding: 28px 20px; border-radius: 22px; border: 1px solid rgba(0,147,137,0.42); background: rgba(0,147,137,0.13);">
+        <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#25C9BC" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+          <rect x="2" y="3.5" width="20" height="14" rx="2.5"></rect>
+          <path d="M8 21h8"></path><path d="M12 17.5V21"></path>
+          <circle cx="12" cy="9" r="2.4"></circle>
+          <path d="M8.2 14.2a4.2 4.2 0 0 1 7.6 0"></path>
+        </svg>
+        <span style="font-size: 29px; font-weight: 700; line-height: 1.3; color: #FFFFFF;">حصص VIP فردية</span>
+        <span style="font-size: 25px; font-weight: 500; line-height: 1.42; color: #ACB3CD;">بث مباشر ومتابعة بعد كل حصّة</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 18px; padding: 28px 20px; border-radius: 22px; border: 1px solid rgba(179,173,225,0.34); background: rgba(179,173,225,0.10);">
+        <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#B3ADE1" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+          <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h4A2.5 2.5 0 0 1 12 6.5v13a2 2 0 0 0-2-2H5.5A1.5 1.5 0 0 1 4 16z"></path>
+          <path d="M20 5.5A1.5 1.5 0 0 0 18.5 4h-4A2.5 2.5 0 0 0 12 6.5v13a2 2 0 0 1 2-2h4.5a1.5 1.5 0 0 0 1.5-1.5z"></path>
+        </svg>
+        <span style="font-size: 29px; font-weight: 700; line-height: 1.3; color: #FFFFFF;">كورسات مسجّلة</span>
+        <span style="font-size: 25px; font-weight: 500; line-height: 1.42; color: #ACB3CD;">فيديوهات وتمارين لكل درس</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 18px; padding: 28px 20px; border-radius: 22px; border: 1px solid rgba(245,112,5,0.42); background: rgba(245,112,5,0.13);">
+        <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#FF9A4D" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+          <path d="M8 3.5h8a1.5 1.5 0 0 1 1.5 1.5v14A1.5 1.5 0 0 1 16 20.5H8A1.5 1.5 0 0 1 6.5 19V5A1.5 1.5 0 0 1 8 3.5z"></path>
+          <path d="M9.6 9.4l1.5 1.5 3-3"></path>
+          <path d="M9.6 15.4h4.8"></path>
+        </svg>
+        <span style="font-size: 29px; font-weight: 700; line-height: 1.3; color: #FFFFFF;">اختبارات تفاعلية</span>
+        <span style="font-size: 25px; font-weight: 500; line-height: 1.42; color: #ACB3CD;">أسئلة سنوات سابقة وتصحيح فوري</span>
+      </div>
+
+    </div>
+
+    <!-- cta -->
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 24px;">
+      <div style="display: flex; align-items: center; gap: 16px; padding: 24px 42px; border-radius: 999px; background: #F57005;">
+        <span style="font-size: 36px; font-weight: 900; color: #05092D;">احجز حصّتك الحين</span>
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#05092D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+          <path d="M19 12H5"></path><path d="M11 18l-6-6 6-6"></path>
+        </svg>
+      </div>
+      <span style="font-size: 36px; font-weight: 700; color: #FFFFFF; letter-spacing: 0.5px; direction: ltr;">q-genius.com</span>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
