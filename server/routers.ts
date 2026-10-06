@@ -1,5 +1,6 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { revokeOtpSession } from "./auth";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
@@ -7,7 +8,7 @@ import { invokeLLM } from "./_core/llm";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import * as db from "./db";
-import { generateDocx, generatePdfFromDocx } from "./exportDoc";
+import { generatePlanHtml } from "./documentHtml";
 import {
   listFolderContents,
   buildQatarCurriculumTree,
@@ -17,8 +18,9 @@ import {
   downloadFile,
 } from "./googleDrive";
 import { extractPdfText } from "./pdfExtract";
-import { createCheckout } from "./payments";
+import { createCheckout, getPaymentReadiness, getPaymentUnavailableReason, isCurrentPaymentTerm } from "./payments";
 import { checkRateLimit, RATE_LIMITS } from "./rateLimiter";
+import { parseGeneratedJson, planContentSchema, worksheetContentSchema } from "../shared/generation";
 
 // ==================== Plan Generation System Prompt ====================
 const PLAN_SYSTEM_PROMPT = `أنت خبير مناهج وطرائق تدريس متخصص في إعداد خطط الدروس اليومية وفق النماذج الوزارية الخليجية.
@@ -29,7 +31,7 @@ const PLAN_SYSTEM_PROMPT = `أنت خبير مناهج وطرائق تدريس �
 1. أخرج JSON صالحاً فقط، دون أي نص قبله أو بعده، ودون علامات Markdown.
 2. الأهداف سلوكية قابلة للقياس بصيغة: "أن + فعل إجرائي + الطالب + المحتوى + المعيار"، موزعة على المجالات الثلاثة (معرفي، مهاري، وجداني) وفق تصنيف بلوم، بواقع 3-5 أهداف إجمالاً.
 3. اختر الاستراتيجيات من قائمة "الاستراتيجيات المتاحة" المرسلة فقط، ولا تخترع غيرها، واربط كل خطوة تنفيذ باستراتيجية.
-4. مجموع أزمنة خطوات التنفيذ يساوي زمن الحصة بالضبط.
+4. مجموع أزمنة خطوات التنفيذ يساوي عدد الحصص × 45 دقيقة بالضبط.
 5. التقويم ثلاثي: قبلي (سؤال تشخيصي واحد)، بنائي (2-3 أسئلة أثناء الدرس)، ختامي (2-3 أسئلة أو مهمة قصيرة) — أسئلة فعلية جاهزة للطرح، لا أوصافاً عامة.
 6. القيمة التربوية مستمدة من محتوى الدرس نفسه، لا قيمة عامة منفصلة عنه.
 7. الدمج التكنولوجي واقعي وقابل للتطبيق في صف عادي (محاكاة، فيديو قصير، سبورة تفاعلية، تجربة افتراضية...).
@@ -135,79 +137,13 @@ const WORKSHEET_JSON_SCHEMA = {
   required: ["title", "instructions", "questions", "answer_key"],
 };
 
-// ==================== Plan HTML Generator for PDF Export ====================
-function generatePlanHtml(plan: any): string {
-  const obj = plan.objectives || {};
-  const proc = plan.procedures || [];
-  const assess = plan.assessment || {};
-  const diff = plan.differentiation || {};
-  return `<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="UTF-8">
-<style>
-  body { font-family: 'Tajawal', 'Noto Sans Arabic', sans-serif; padding: 40px; color: #1a1a1a; }
-  h1 { text-align: center; color: #0d6b56; font-size: 22px; margin-bottom: 24px; }
-  h2 { color: #0d6b56; font-size: 16px; border-bottom: 2px solid #0d6b56; padding-bottom: 4px; margin-top: 20px; }
-  table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-  td, th { border: 1px solid #ddd; padding: 8px; font-size: 13px; text-align: right; }
-  th { background: #f0f9f6; }
-  .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 16px; }
-  .info-item { background: #f0f9f6; padding: 8px; border-radius: 6px; }
-  .info-label { font-size: 11px; color: #666; }
-  .info-value { font-size: 13px; font-weight: bold; }
-  ul { padding-right: 20px; }
-  li { margin-bottom: 4px; font-size: 13px; }
-  .section { margin-bottom: 16px; }
-  .badge { display: inline-block; background: #e8f5f0; padding: 2px 10px; border-radius: 12px; font-size: 12px; margin: 2px; }
-</style>
-</head>
-<body>
-  <h1>خطة درس يومية</h1>
-  <div class="info-grid">
-    <div class="info-item"><div class="info-label">المادة</div><div class="info-value">${plan.basic_info?.subject || ''}</div></div>
-    <div class="info-item"><div class="info-label">الصف</div><div class="info-value">${plan.basic_info?.grade || ''}</div></div>
-    <div class="info-item"><div class="info-label">الوحدة</div><div class="info-value">${plan.basic_info?.unit || ''}</div></div>
-    <div class="info-item"><div class="info-label">الدرس</div><div class="info-value">${plan.basic_info?.lesson || ''}</div></div>
-    <div class="info-item"><div class="info-label">التاريخ</div><div class="info-value">${plan.basic_info?.date || ''}</div></div>
-    <div class="info-item"><div class="info-label">عدد الحصص</div><div class="info-value">${plan.basic_info?.periods || 1}</div></div>
-    <div class="info-item"><div class="info-label">الصفحات</div><div class="info-value">${plan.basic_info?.pages || ''}</div></div>
-  </div>
-  <h2>الأهداف التعليمية</h2>
-  <div class="section">
-    <p><strong>المعرفية:</strong></p><ul>${(obj.cognitive||[]).map((o:string)=>`<li>${o}</li>`).join('')}</ul>
-    <p><strong>المهارية:</strong></p><ul>${(obj.skills||[]).map((o:string)=>`<li>${o}</li>`).join('')}</ul>
-    <p><strong>الوجدانية:</strong></p><ul>${(obj.affective||[]).map((o:string)=>`<li>${o}</li>`).join('')}</ul>
-  </div>
-  <h2>التهيئة</h2><p>${plan.warm_up || ''}</p>
-  <h2>الاستراتيجيات والوسائل</h2>
-  <p><strong>الاستراتيجيات:</strong> ${(plan.strategies||[]).map((s:string)=>`<span class="badge">${s}</span>`).join('')}</p>
-  <p><strong>الوسائل:</strong> ${(plan.materials||[]).map((m:string)=>`<span class="badge">${m}</span>`).join('')}</p>
-  <h2>خطوات التنفيذ</h2>
-  <table><tr><th>الخطوة</th><th>الزمن</th><th>دور المعلم</th><th>دور الطالب</th></tr>
-  ${proc.map((p:any)=>`<tr><td>${p.step}</td><td>${p.time_minutes} دقيقة</td><td>${p.teacher_role}</td><td>${p.student_role}</td></tr>`).join('')}
-  </table>
-  <h2>التقويم</h2>
-  <p><strong>القبلي:</strong> ${assess.diagnostic || ''}</p>
-  <p><strong>البنائي:</strong></p><ul>${(assess.formative||[]).map((q:string)=>`<li>${q}</li>`).join('')}</ul>
-  <p><strong>الختامي:</strong></p><ul>${(assess.summative||[]).map((q:string)=>`<li>${q}</li>`).join('')}</ul>
-  <h2>القيم التربوية</h2><p>${(plan.values||[]).map((v:string)=>`<span class="badge">${v}</span>`).join('')}</p>
-  <h2>الدمج التكنولوجي</h2><p>${plan.tech_integration || ''}</p>
-  <h2>مراعاة الفروق الفردية</h2>
-  <p><strong>دعم المتعثرين:</strong> ${diff.support || ''}</p>
-  <p><strong>إثراء المتفوقين:</strong> ${diff.enrichment || ''}</p>
-  <h2>الواجب المنزلي</h2><p>${plan.homework || ''}</p>
-  <h2>الربط بالحياة</h2><p>${plan.real_life_connection || ''}</p>
-</body>
-</html>`;
-}
-
 export const appRouter = router({
   system: systemRouter,
 
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
+    logout: publicProcedure.mutation(async ({ ctx }) => {
+      await revokeOtpSession(ctx.req);
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
@@ -312,42 +248,54 @@ export const appRouter = router({
       }),
     generate: protectedProcedure
       .input(z.object({
-        lessonId: z.number(),
-        templateId: z.number(),
-        planDate: z.string().optional(),
-        periods: z.number().default(1),
+        lessonId: z.number().int().positive(),
+        templateId: z.number().int().positive().optional(),
+        planDate: z.iso.date().optional(),
+        periods: z.number().int().min(1).max(10).default(1),
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = ctx.user.id;
-        // Rate limit check
+        const context = await db.getGenerationLessonContext(input.lessonId);
+        if (!context) return { success: false, error: "الدرس غير موجود أو لم يُعتمد منهجه بعد" };
+        const { lesson, unit, textbook, country, subject, grade } = context;
+        const template = await db.getTemplateByCountry(country.id);
+        if (!template) return { success: false, error: "لم يُضف قالب تحضير معتمد لهذه الدولة بعد" };
+        if (input.templateId !== undefined && input.templateId !== template.id) {
+          return { success: false, error: "قالب التحضير لا يطابق دولة المنهج المختار" };
+        }
+        const planDate = input.planDate ?? new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Asia/Qatar", year: "numeric", month: "2-digit", day: "2-digit",
+        }).format(new Date());
+        // Already owned content remains accessible even after the last credit.
+        const cached = await db.getCachedPlan(userId, lesson.id, template.id, planDate, input.periods);
+        if (cached) {
+          const validated = planContentSchema.safeParse(cached.content);
+          if (validated.success) {
+            return { success: true, planId: cached.id, content: validated.data, cached: true };
+          }
+        }
         checkRateLimit(userId, RATE_LIMITS.generate);
-        // Check eligibility
-        const eligible = await db.canGenerate(userId);
-        if (!eligible) {
+        const subscription = await db.getSubscriptionStatus(userId);
+        const creditReserved = !subscription.active && await db.reserveGenerationCredit(userId);
+        if (!subscription.active && !creditReserved) {
           return { success: false, error: "لقد استخدمت جميع خططك المجانية. يرجى الاشتراك أو شراء خطط فردية للمتابعة." };
         }
-        // Check cache first
-        const cached = await db.getCachedPlan(userId, input.lessonId, input.templateId);
-        if (cached) {
-          return { success: true, plan: cached, cached: true };
-        }
-        // Gather lesson data
-        const lesson = await db.getLessonById(input.lessonId);
-        if (!lesson) return { success: false, error: "الدرس غير موجود" };
-        const unit = await db.getUnitById(lesson.unitId);
-        const textbook = unit ? await db.getTextbookById(unit.textbookId) : null;
-        const template = await db.getTemplateByCountry(textbook?.countryId ?? 1);
-        const templateFields = template?.fields as any;
+        let planId: number | undefined;
+        try {
+        const templateFields = template.fields as any;
+        const pages = lesson.pageFrom != null && lesson.pageTo != null
+          ? `${lesson.pageFrom}-${lesson.pageTo}` : "";
         // Build user message
         const userMessage = `بيانات الدرس:
-- الدولة: قطر
-- المرحلة / الصف: ${textbook?.title ?? ""}
-- المادة: العلوم
-- الوحدة: ${unit?.title ?? ""}
+- الدولة: ${country.nameAr}
+- الصف: ${grade.nameAr}
+- المادة: ${subject.nameAr}
+- الكتاب: ${textbook.title}
+- الوحدة: ${unit.title}
 - الدرس: ${lesson.title}
-- الصفحات: ${lesson.pageFrom ?? ""}-${lesson.pageTo ?? ""}
-- عدد الحصص: ${input.periods} | زمن الحصة: 45 دقيقة
-- تاريخ التنفيذ: ${input.planDate ?? new Date().toISOString().slice(0, 10)}
+- الصفحات: ${pages}
+- عدد الحصص: ${input.periods} | زمن الحصة: 45 دقيقة | الزمن الإجمالي: ${input.periods * 45} دقيقة
+- تاريخ التنفيذ: ${planDate}
 - أهداف دليل المعلم (إن وجدت): ${JSON.stringify(lesson.objectives ?? [])}
 - الاستراتيجيات المتاحة: ${JSON.stringify(templateFields?.strategies ?? [])}
 - القيم المعتمدة في الدولة: ${JSON.stringify(templateFields?.values ?? [])}
@@ -355,12 +303,12 @@ export const appRouter = router({
 أنتج الخطة وفق هذا المخطط حرفياً:
 ${JSON.stringify(PLAN_JSON_SCHEMA)}`;
         // Create plan record
-        const planId = await db.createPlan({
-          userId, lessonId: input.lessonId, templateId: input.templateId,
-          planDate: input.planDate as any, periods: input.periods,
+        planId = await db.createPlan({
+          userId, lessonId: lesson.id, templateId: template.id,
+          planDate: new Date(`${planDate}T00:00:00.000Z`), periods: input.periods,
           status: "generating",
         });
-        try {
+          if (!planId) throw new Error("Plan could not be saved");
           const response = await invokeLLM({
             model: "claude-sonnet-4-6",
             messages: [
@@ -376,47 +324,60 @@ ${JSON.stringify(PLAN_JSON_SCHEMA)}`;
               },
             },
           });
-          const rawContent = response.choices?.[0]?.message?.content;
-          const contentStr = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
-          let planContent: any;
-          try { planContent = JSON.parse(contentStr); }
-          catch { planContent = JSON.parse(contentStr.replace(/```json\n?/g, "").replace(/```/g, "")); }
-          await db.updatePlan(planId!, {
+          if (["length", "max_tokens"].includes(response.choices?.[0]?.finish_reason ?? "")) {
+            throw new Error("Generated plan was truncated");
+          }
+          const planContent = planContentSchema.parse(parseGeneratedJson(response.choices?.[0]?.message?.content));
+          // These values come from the reviewed curriculum and the teacher's
+          // request, rather than trusting the model to reproduce them exactly.
+          planContent.basic_info = {
+            subject: subject.nameAr, grade: grade.nameAr, unit: unit.title,
+            lesson: lesson.title, date: planDate, periods: input.periods, pages,
+          };
+          const minutes = planContent.procedures.reduce((total, step) => total + step.time_minutes, 0);
+          if (Math.abs(minutes - input.periods * 45) > 0.001) {
+            throw new Error("Generated plan duration does not match the requested periods");
+          }
+          if (planContent.objectives.cognitive.length + planContent.objectives.skills.length + planContent.objectives.affective.length === 0) {
+            throw new Error("Generated plan has no objectives");
+          }
+          await db.updatePlan(planId, {
             status: "ready", content: planContent,
             model: response.model ?? "claude",
             inputTokens: response.usage?.prompt_tokens,
             outputTokens: response.usage?.completion_tokens,
           });
-          // Deduct credit only if no active subscription
-          const subStatus = await db.getSubscriptionStatus(userId);
-          if (!subStatus.active) {
-            await db.deductCredit(userId);
-          }
           return { success: true, planId, content: planContent, cached: false };
-        } catch (error: any) {
-          await db.updatePlan(planId!, { status: "failed" });
-          return { success: false, error: `فشل التوليد: ${error.message}` };
+        } catch (error) {
+          console.error("[plans.generate] Generation failed", error);
+          if (planId) {
+            try { await db.updatePlan(planId, { status: "failed" }); }
+            catch (updateError) { console.error("[plans.generate] Could not mark failed plan", updateError); }
+          }
+          if (creditReserved) await db.refundGenerationCredit(userId);
+          return { success: false, error: "تعذر توليد خطة سليمة. لم يُخصم رصيد لهذه المحاولة؛ حاول مرة أخرى لاحقاً." };
         }
       }),
     worksheet: protectedProcedure
       .input(z.object({
-        planId: z.number(),
-        lessonId: z.number(),
+        planId: z.number().int().positive(),
+        lessonId: z.number().int().positive().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = ctx.user.id;
-        // Rate limit check
-        checkRateLimit(userId, RATE_LIMITS.worksheet);
         const plan = await db.getPlanById(input.planId, userId);
         if (!plan || plan.status !== "ready") {
           return { success: false, error: "الخطة غير موجودة أو غير جاهزة" };
         }
+        if (input.lessonId !== undefined && input.lessonId !== plan.lessonId) {
+          return { success: false, error: "الدرس لا يطابق الخطة المختارة" };
+        }
         // Check cache first
-        const cachedWs = await db.getCachedWorksheet(input.planId);
+        const cachedWs = await db.getCachedWorksheet(plan.id, userId);
         if (cachedWs) {
           return { success: true, worksheetId: cachedWs.id, content: cachedWs.content, cached: true };
         }
-        const lesson = await db.getLessonById(input.lessonId);
+        checkRateLimit(userId, RATE_LIMITS.worksheet);
         const userMessage = `خطة الدرس كاملة (JSON):
 ${JSON.stringify(plan.content)}
 
@@ -439,22 +400,26 @@ ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
               },
             },
           });
-          const rawWsContent = response.choices?.[0]?.message?.content;
-          const wsContentStr = typeof rawWsContent === "string" ? rawWsContent : JSON.stringify(rawWsContent);
-          let wsContent: any;
-          try { wsContent = JSON.parse(wsContentStr); }
-          catch { wsContent = JSON.parse(wsContentStr.replace(/```json\n?/g, "").replace(/```/g, "")); }
+          if (["length", "max_tokens"].includes(response.choices?.[0]?.finish_reason ?? "")) {
+            throw new Error("Generated worksheet was truncated");
+          }
+          const wsContent = worksheetContentSchema.parse(parseGeneratedJson(response.choices?.[0]?.message?.content));
           const wsId = await db.createWorksheet({
-            userId, planId: input.planId, lessonId: input.lessonId, content: wsContent,
+            userId, planId: plan.id, lessonId: plan.lessonId, content: wsContent,
           });
-          return { success: true, worksheetId: wsId, content: wsContent };
-        } catch (error: any) {
-          return { success: false, error: `فشل توليد ورقة العمل: ${error.message}` };
+          if (!wsId) throw new Error("Worksheet could not be saved");
+          return { success: true, worksheetId: wsId, content: wsContent, cached: false };
+        } catch (error) {
+          console.error("[plans.worksheet] Generation failed", error);
+          return { success: false, error: "تعذر توليد ورقة عمل سليمة. حاول مرة أخرى لاحقاً." };
         }
       }),
     worksheets: protectedProcedure.query(async ({ ctx }) => {
       return await db.getWorksheetsByUser(ctx.user.id);
     }),
+    worksheetGet: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => db.getWorksheetById(input.id, ctx.user.id)),
     exportPdf: protectedProcedure
       .input(z.object({ planId: z.number() }))
       .mutation(async ({ ctx, input }) => {
@@ -467,49 +432,38 @@ ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
         return { success: true, html };
       }),
     exportDocx: protectedProcedure
-      .input(z.object({ planId: z.number() }))
+      .input(z.object({ planId: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         const plan = await db.getPlanById(input.planId, ctx.user.id);
-        if (!plan || plan.status !== "ready") {
-          return { success: false, error: "الخطة غير جاهزة" };
-        }
-        try {
-          const content = plan.content as any;
-          const countryId = (plan as any).countryId || 1;
-          const docxBuffer = await generateDocx(content, countryId);
-          const { storagePut } = await import("./storage");
-          const result = await storagePut(`exports/plan_${input.planId}.docx`, docxBuffer, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-          return { success: true, url: result.url };
-        } catch (error: any) {
-          return { success: false, error: `فشل تصدير Word: ${error.message}` };
-        }
+        if (!plan || plan.status !== "ready") return { success: false, error: "الخطة غير جاهزة" };
+        return { success: true, url: `/api/exports/plans/${plan.id}.docx` };
       }),
     exportRealPdf: protectedProcedure
-      .input(z.object({ planId: z.number() }))
+      .input(z.object({ planId: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         const plan = await db.getPlanById(input.planId, ctx.user.id);
-        if (!plan || plan.status !== "ready") {
-          return { success: false, error: "الخطة غير جاهزة" };
-        }
-        try {
-          const content = plan.content as any;
-          const countryId = (plan as any).countryId || 1;
-          const docxBuffer = await generateDocx(content, countryId);
-          const pdfBuffer = await generatePdfFromDocx(docxBuffer);
-          const { storagePut } = await import("./storage");
-          const result = await storagePut(`exports/plan_${input.planId}.pdf`, pdfBuffer, "application/pdf");
-          return { success: true, url: result.url };
-        } catch (error: any) {
-          // Fallback to HTML PDF if LibreOffice not available
-          const content = plan.content as any;
-          const html = generatePlanHtml(content);
-          return { success: true, html, fallback: true };
-        }
+        if (!plan || plan.status !== "ready") return { success: false, error: "الخطة غير جاهزة" };
+        return { success: true, url: `/api/exports/plans/${plan.id}.pdf` };
       }),
   }),
 
   // ==================== Subscription & Credits ====================
   subscription: router({
+    paymentConfig: protectedProcedure.query(async ({ ctx }) => {
+      const readiness = getPaymentReadiness();
+      const user = await db.getUserById(ctx.user.id);
+      const country = user?.countryId
+        ? (await db.getActiveCountries()).find(c => c.id === user.countryId && c.isActive) ?? null
+        : null;
+      const term = country ? await db.getCurrentTermForCountry(country.id) : null;
+      return {
+        enabled: readiness.enabled,
+        gateways: readiness.gateways,
+        message: readiness.message,
+        country,
+        semesterTerm: country && isCurrentPaymentTerm(term, country.id) ? term : null,
+      };
+    }),
     status: protectedProcedure.query(async ({ ctx }) => {
       return await db.getSubscriptionStatus(ctx.user.id);
     }),
@@ -519,22 +473,30 @@ ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
     buyPlan: protectedProcedure
       .input(z.object({ gateway: z.enum(["myfatoorah", "tap", "lemonsqueezy"]) }))
       .mutation(async ({ ctx, input }) => {
+        const unavailable = getPaymentUnavailableReason(input.gateway);
+        if (unavailable) return unavailable;
         const userId = ctx.user.id;
-        const country = await db.getActiveCountries();
-        const c = country[0];
-        if (!c) return { success: false, error: "لا توجد دولة نشطة" };
+        checkRateLimit(userId, RATE_LIMITS.buyPlan);
+        const user = await db.getUserById(userId);
+        if (!user?.countryId) return { success: false, error: "اختر دولتك من الملف الشخصي أولاً" };
+        const c = (await db.getActiveCountries()).find(c => c.id === user.countryId && c.isActive);
+        if (!c) return { success: false, error: "الدولة المحددة غير متاحة للدفع" };
+        if (!Number.isFinite(Number(c.pricePerPlan)) || Number(c.pricePerPlan) <= 0 || !/^[A-Z]{3}$/.test(c.currencyCode)) {
+          return { success: false, error: "سعر الخطة غير متاح حالياً" };
+        }
         const purchaseId = await db.createPurchase({
           userId, kind: "single_plan", quantity: 1,
           amount: c.pricePerPlan, currency: c.currencyCode,
           gateway: input.gateway, status: "pending",
         });
+        if (!purchaseId || !Number.isSafeInteger(purchaseId)) return { success: false, error: "تعذر إنشاء الطلب حالياً" };
         const checkout = await createCheckout({
           gateway: input.gateway,
-          purchaseId: purchaseId!,
+          purchaseId,
           amount: c.pricePerPlan,
           currency: c.currencyCode,
-          customerName: ctx.user.fullName || ctx.user.name || "Teacher",
-          customerEmail: ctx.user.email,
+          customerName: user.fullName || user.name || "Teacher",
+          customerEmail: user.email,
           description: "خطة درس واحدة — مساعد المعلم",
         });
         if (!checkout.success) return { success: false, error: checkout.error };
@@ -543,23 +505,32 @@ ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
     buySemester: protectedProcedure
       .input(z.object({ gateway: z.enum(["myfatoorah", "tap", "lemonsqueezy"]) }))
       .mutation(async ({ ctx, input }) => {
+        const unavailable = getPaymentUnavailableReason(input.gateway);
+        if (unavailable) return unavailable;
         const userId = ctx.user.id;
         checkRateLimit(userId, RATE_LIMITS.buySemester);
-        const country = await db.getActiveCountries();
-        const c = country[0];
-        if (!c) return { success: false, error: "لا توجد دولة نشطة" };
+        const user = await db.getUserById(userId);
+        if (!user?.countryId) return { success: false, error: "اختر دولتك من الملف الشخصي أولاً" };
+        const c = (await db.getActiveCountries()).find(c => c.id === user.countryId && c.isActive);
+        if (!c) return { success: false, error: "الدولة المحددة غير متاحة للدفع" };
+        const term = await db.getCurrentTermForCountry(c.id);
+        if (!isCurrentPaymentTerm(term, c.id)) return { success: false, error: "لا يوجد فصل دراسي صالح للدفع حالياً" };
+        if (!Number.isFinite(Number(c.pricePerSemester)) || Number(c.pricePerSemester) <= 0 || !/^[A-Z]{3}$/.test(c.currencyCode)) {
+          return { success: false, error: "سعر الاشتراك غير متاح حالياً" };
+        }
         const purchaseId = await db.createPurchase({
           userId, kind: "semester", quantity: 1,
           amount: c.pricePerSemester, currency: c.currencyCode,
           gateway: input.gateway, status: "pending",
         });
+        if (!purchaseId || !Number.isSafeInteger(purchaseId)) return { success: false, error: "تعذر إنشاء الطلب حالياً" };
         const checkout = await createCheckout({
           gateway: input.gateway,
-          purchaseId: purchaseId!,
+          purchaseId,
           amount: c.pricePerSemester,
           currency: c.currencyCode,
-          customerName: ctx.user.fullName || ctx.user.name || "Teacher",
-          customerEmail: ctx.user.email,
+          customerName: user.fullName || user.name || "Teacher",
+          customerEmail: user.email,
           description: "اشتراك فصل دراسي — مساعد المعلم",
         });
         if (!checkout.success) return { success: false, error: checkout.error };
@@ -686,7 +657,7 @@ ${JSON.stringify(WORKSHEET_JSON_SCHEMA)}`;
         termId: z.number().optional(),
         textbookTitle: z.string(),
         editionYear: z.number().optional(),
-        maxPages: z.number().default(30),
+        maxPages: z.number().int().min(1).max(200).default(30),
       }))
       .mutation(async ({ ctx, input }) => {
         checkRateLimit(ctx.user.id, RATE_LIMITS.indexPdf);

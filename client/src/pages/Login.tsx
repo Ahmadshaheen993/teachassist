@@ -5,6 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
+import { startLegacyLogin } from "@/const";
+
+type LoginConfig = {
+  emailOtpEnabled: boolean;
+  legacyOAuthEnabled: boolean;
+  legacyOAuthUrl: string | null;
+  legacyAppId: string | null;
+};
 
 export default function Login() {
   const [, navigate] = useLocation();
@@ -15,6 +23,19 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [config, setConfig] = useState<LoginConfig | null>(null);
+  const [configError, setConfigError] = useState(false);
+
+  useEffect(() => {
+    const abort = new AbortController();
+    fetch("/api/auth/config", { signal: abort.signal, cache: "no-store" })
+      .then(async response => {
+        if (!response.ok) throw new Error("config");
+        setConfig(await response.json());
+      })
+      .catch(() => { if (!abort.signal.aborted) setConfigError(true); });
+    return () => abort.abort();
+  }, []);
 
   // عدّاد إعادة الإرسال
   useEffect(() => {
@@ -25,10 +46,12 @@ export default function Login() {
 
   // طلب OTP
   const handleRequestOtp = useCallback(async () => {
+    if (!config?.emailOtpEnabled || loading) return;
     setError(null);
     setInfo(null);
 
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
       setError("يرجى إدخال بريد إلكتروني صالح");
       return;
     }
@@ -38,16 +61,19 @@ export default function Login() {
       const resp = await fetch("/api/auth/request-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: normalizedEmail }),
       });
 
       const data = await resp.json();
 
       if (!resp.ok) {
+        if (resp.status === 429) setResendCooldown(Number(resp.headers.get("Retry-After")) || 60);
         setError(data.error || "فشل إرسال الرمز");
         return;
       }
 
+      setEmail(normalizedEmail);
+      setOtp("");
       setInfo("تم إرسال رمز التحقق إلى بريدك الإلكتروني");
       setStep("otp");
       setResendCooldown(60);
@@ -56,10 +82,11 @@ export default function Login() {
     } finally {
       setLoading(false);
     }
-  }, [email]);
+  }, [email, config, loading]);
 
   // التحقق من OTP
   const handleVerifyOtp = useCallback(async () => {
+    if (!config?.emailOtpEnabled || loading) return;
     setError(null);
     setInfo(null);
 
@@ -92,21 +119,30 @@ export default function Login() {
     } finally {
       setLoading(false);
     }
-  }, [email, otp, navigate]);
+  }, [email, otp, navigate, config, loading]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+    <div dir="rtl" className="min-h-screen flex items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">تسجيل الدخول</CardTitle>
           <CardDescription>
-            {step === "email"
+            {!config?.emailOtpEnabled ? "اختر طريقة تسجيل الدخول المتاحة" : step === "email"
               ? "أدخل بريدك الإلكتروني لتسجيل الدخول"
               : "أدخل الرمز المرسل إلى بريدك"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {step === "email" && (
+          {!config && !configError && <Spinner className="mx-auto size-5" />}
+          {configError && <p role="alert" className="text-sm text-destructive">تعذّر تحميل طرق تسجيل الدخول، أعد تحميل الصفحة.</p>}
+          {config && !config.emailOtpEnabled && <p className="text-sm text-muted-foreground">تسجيل الدخول بالبريد غير متاح حالياً.</p>}
+          {config?.legacyOAuthEnabled && config.legacyOAuthUrl && config.legacyAppId && (
+            <Button className="w-full" variant={config.emailOtpEnabled ? "outline" : "default"}
+              onClick={() => startLegacyLogin(config.legacyOAuthUrl!, config.legacyAppId!)}>
+              الدخول بالحساب الحالي
+            </Button>
+          )}
+          {config?.emailOtpEnabled && step === "email" && (
             <>
               <div className="space-y-2">
                 <Label htmlFor="email">البريد الإلكتروني</Label>
@@ -133,7 +169,7 @@ export default function Login() {
             </>
           )}
 
-          {step === "otp" && (
+          {config?.emailOtpEnabled && step === "otp" && (
             <>
               <div className="space-y-2">
                 <Label htmlFor="otp">رمز التحقق (6 أرقام)</Label>
@@ -153,7 +189,7 @@ export default function Login() {
                 />
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
-              {info && <p className="text-sm text-muted-foreground">{info}</p>}
+              {info && <p role="status" className="text-sm text-muted-foreground">{info}</p>}
               <Button
                 className="w-full"
                 onClick={handleVerifyOtp}

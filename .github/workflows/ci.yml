@@ -1,0 +1,60 @@
+name: Application checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: teachassist_test
+          MYSQL_USER: teachassist_ci
+          MYSQL_PASSWORD: disposable-ci-password
+          MYSQL_ROOT_PASSWORD: disposable-root-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      # Public test credentials belong only to this job's disposable service.
+      AUTH_TEST_DATABASE_URL: mysql://teachassist_ci:disposable-ci-password@127.0.0.1:3306/teachassist_test
+      AUTH_OTP_ENABLED: "false"
+      PAYMENTS_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          # packageManager pins pnpm 10.4.1 with its integrity hash.
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Verify pinned pnpm
+        run: test "$(pnpm --version)" = "10.4.1"
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: TypeScript
+        run: pnpm check
+      - name: Validate tracked migrations on disposable MySQL
+        run: node scripts/check-test-migrations.mjs
+      - name: Unit and MySQL integration tests
+        run: pnpm test
+      - name: Production build
+        run: pnpm build

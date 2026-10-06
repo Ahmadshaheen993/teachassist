@@ -6,9 +6,10 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { paymentWebhooks } from "../payments";
-import { requestOtp, verifyOtp } from "../auth";
+import { registerAuthRoutes } from "../auth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
+import { registerExportRoutes } from "../exportRoutes";
 
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -33,17 +34,19 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
-  // Payment webhooks FIRST — need the raw body for HMAC signature verification,
-  // before the global JSON parser consumes it. (MyFatoorah + Tap + Lemon Squeezy)
+  // Quarantined webhooks must return retryable errors before body parsing.
   app.use("/api/webhooks", paymentWebhooks);
+  // Authentication accepts only small JSON requests; curriculum PDF uploads
+  // retain their separate larger limit below.
+  app.use("/api/auth", express.json({ limit: "16kb" }));
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
-  // Auth V2: Email + OTP
-  app.post("/api/auth/request-otp", requestOtp);
-  app.post("/api/auth/verify-otp", verifyOtp);
+  // Independent login remains disabled until staging migration/provider checks.
+  registerAuthRoutes(app);
+  registerExportRoutes(app);
   // tRPC API
   app.use(
     "/api/trpc",

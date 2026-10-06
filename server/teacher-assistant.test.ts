@@ -40,7 +40,17 @@ vi.mock("./db", () => ({
   getTemplateByCountry: vi.fn().mockResolvedValue({
     id: 1, countryId: 1, nameAr: "قالب قطر", fields: { strategies: ["التعلم التعاوني", "الاستقصاء"], values: ["التعاون", "الإتقان"] },
   }),
+  getGenerationLessonContext: vi.fn().mockResolvedValue({
+    lesson: { id: 1, unitId: 1, title: "الدرس 1: المادة وخصائصها", pageFrom: 12, pageTo: 18 },
+    unit: { id: 1, textbookId: 1, title: "الوحدة الأولى" },
+    textbook: { id: 1, countryId: 1, subjectId: 1, gradeId: 1, title: "العلوم للصف الثامن" },
+    country: { id: 1, nameAr: "قطر" },
+    subject: { id: 1, nameAr: "العلوم" },
+    grade: { id: 1, nameAr: "الثامن" },
+  }),
   getCachedPlan: vi.fn().mockResolvedValue(undefined),
+  reserveGenerationCredit: vi.fn().mockResolvedValue(true),
+  refundGenerationCredit: vi.fn().mockResolvedValue(undefined),
   createPlan: vi.fn().mockResolvedValue(1),
   updatePlan: vi.fn().mockResolvedValue(undefined),
   deductCredit: vi.fn().mockResolvedValue(undefined),
@@ -88,7 +98,8 @@ vi.mock("./db", () => ({
 }));
 
 // Mock payments
-vi.mock("./payments", () => ({
+vi.mock("./payments", async importOriginal => ({
+  ...await importOriginal<typeof import("./payments")>(),
   createCheckout: vi.fn().mockResolvedValue({ success: true, paymentUrl: "https://pay.example.com/checkout" }),
   paymentWebhooks: vi.fn(),
 }));
@@ -104,7 +115,7 @@ vi.mock("./_core/llm", () => ({
           warm_up: "سؤال تمهيدي",
           strategies: ["التعلم التعاوني"],
           materials: ["سبورة", "نماذج"],
-          procedures: [{ step: "مقدمة", time_minutes: 10, teacher_role: "يقدم", student_role: "يستمع" }],
+          procedures: [{ step: "مقدمة", time_minutes: 45, teacher_role: "يقدم", student_role: "يستمع" }],
           assessment: { diagnostic: "ما هي المادة؟", formative: ["اذكر خصائص المادة"], summative: ["صنف المواد"] },
           values: ["التعاون"],
           tech_integration: "عرض فيديو",
@@ -207,20 +218,26 @@ describe("Subscription Router", () => {
     expect(result.credits).toBe(2);
   });
 
-  it("creates a single plan purchase with checkout URL", async () => {
+  it("does not create a single plan purchase while payments are unavailable", async () => {
     const ctx = createAuthContext();
     const caller = appRouter.createCaller(ctx);
     const result = await caller.subscription.buyPlan({ gateway: "myfatoorah" });
-    expect(result.success).toBe(true);
-    expect(result.paymentUrl).toContain("checkout");
+    expect(result.success).toBe(false);
+    const db = await import("./db");
+    const payments = await import("./payments");
+    expect(db.createPurchase).not.toHaveBeenCalled();
+    expect(payments.createCheckout).not.toHaveBeenCalled();
   });
 
-  it("creates a semester purchase with checkout URL", async () => {
+  it("does not create a semester purchase while payments are unavailable", async () => {
     const ctx = createAuthContext();
     const caller = appRouter.createCaller(ctx);
     const result = await caller.subscription.buySemester({ gateway: "tap" });
-    expect(result.success).toBe(true);
-    expect(result.paymentUrl).toContain("checkout");
+    expect(result.success).toBe(false);
+    const db = await import("./db");
+    const payments = await import("./payments");
+    expect(db.createPurchase).not.toHaveBeenCalled();
+    expect(payments.createCheckout).not.toHaveBeenCalled();
   });
 });
 

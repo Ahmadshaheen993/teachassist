@@ -18,9 +18,10 @@ RUN pnpm build
 FROM node:22-slim
 WORKDIR /app
 
-# LibreOffice لتحويل Word→PDF + خطوط عربية (بدونها يطلع الـPDF مربعات)
+# LibreOffice لتصدير PDF + Poppler للفهرسة + خطوط عربية
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice-writer \
+    poppler-utils \
     fonts-noto-core \
     fonts-kacst \
     fonts-hosny-amiri \
