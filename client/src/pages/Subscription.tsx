@@ -9,7 +9,7 @@ import { toast } from "sonner";
 export default function Subscription() {
   const { data: subStatus } = trpc.subscription.status.useQuery();
   const { data: purchases } = trpc.subscription.purchases.useQuery();
-  const { data: countries } = trpc.curriculum.countries.useQuery();
+  const { data: paymentConfig, isLoading: isPaymentConfigLoading } = trpc.subscription.paymentConfig.useQuery();
 
   const buyPlanMutation = trpc.subscription.buyPlan.useMutation({
     onSuccess: (data) => {
@@ -20,6 +20,7 @@ export default function Subscription() {
         toast.error(data.error || "فشل إنشاء الطلب");
       }
     },
+    onError: (error) => toast.error(error.message || "فشل إنشاء الطلب"),
   });
 
   const buySemesterMutation = trpc.subscription.buySemester.useMutation({
@@ -31,9 +32,13 @@ export default function Subscription() {
         toast.error(data.error || "فشل إنشاء الطلب");
       }
     },
+    onError: (error) => toast.error(error.message || "فشل إنشاء الطلب"),
   });
 
-  const country = countries?.[0];
+  const country = paymentConfig?.country;
+  const paymentsEnabled = paymentConfig?.enabled === true;
+  const planPurchaseDisabled = isPaymentConfigLoading || !paymentsEnabled || !country || buyPlanMutation.isPending;
+  const semesterPurchaseDisabled = isPaymentConfigLoading || !paymentsEnabled || !country || !paymentConfig?.semesterTerm || buySemesterMutation.isPending;
 
   return (
     <div className="space-y-6">
@@ -41,6 +46,17 @@ export default function Subscription() {
         <h1 className="text-2xl font-bold tracking-tight">الاشتراك والدفع</h1>
         <p className="text-muted-foreground">إدارة اشتراكك ورصيدك من الخطط</p>
       </div>
+
+      {!isPaymentConfigLoading && !paymentsEnabled && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="p-4 text-sm text-amber-900">
+            الدفع غير متاح حالياً. يمكنك استخدام رصيدك الحالي والاشتراك النشط.
+          </CardContent>
+        </Card>
+      )}
+      {!isPaymentConfigLoading && !country && (
+        <p className="text-sm text-muted-foreground">اختر دولتك من الملف الشخصي لعرض الأسعار المناسبة.</p>
+      )}
 
       {/* Status Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -92,7 +108,7 @@ export default function Subscription() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="text-3xl font-bold">
-              {country?.pricePerPlan ?? 10} <span className="text-base font-normal text-muted-foreground">{country?.currencyCode ?? "QAR"}</span>
+              {country?.pricePerPlan ?? "—"} <span className="text-base font-normal text-muted-foreground">{country?.currencyCode ?? ""}</span>
             </div>
             <ul className="text-sm space-y-2">
               <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-green-600" /> خطة درس واحدة كاملة</li>
@@ -100,13 +116,13 @@ export default function Subscription() {
               <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-green-600" /> تصدير PDF و Word</li>
             </ul>
             <div className="flex gap-2">
-              <Button onClick={() => buyPlanMutation.mutate({ gateway: "myfatoorah" })} disabled={buyPlanMutation.isPending} variant="outline" className="flex-1">
+              <Button onClick={() => buyPlanMutation.mutate({ gateway: "myfatoorah" })} disabled={planPurchaseDisabled || !paymentConfig?.gateways.includes("myfatoorah")} variant="outline" className="flex-1">
                 MyFatoorah
               </Button>
-              <Button onClick={() => buyPlanMutation.mutate({ gateway: "tap" })} disabled={buyPlanMutation.isPending} variant="outline" className="flex-1">
+              <Button onClick={() => buyPlanMutation.mutate({ gateway: "tap" })} disabled={planPurchaseDisabled || !paymentConfig?.gateways.includes("tap")} variant="outline" className="flex-1">
                 Tap
               </Button>
-              <Button onClick={() => buyPlanMutation.mutate({ gateway: "lemonsqueezy" })} disabled={buyPlanMutation.isPending} variant="outline" className="flex-1">
+              <Button onClick={() => buyPlanMutation.mutate({ gateway: "lemonsqueezy" })} disabled={planPurchaseDisabled || !paymentConfig?.gateways.includes("lemonsqueezy")} variant="outline" className="flex-1">
                 الدفع بالبطاقة 💳
               </Button>
             </div>
@@ -126,8 +142,14 @@ export default function Subscription() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="text-3xl font-bold">
-              {country?.pricePerSemester ?? 150} <span className="text-base font-normal text-muted-foreground">{country?.currencyCode ?? "QAR"}</span>
+              {country?.pricePerSemester ?? "—"} <span className="text-base font-normal text-muted-foreground">{country?.currencyCode ?? ""}</span>
             </div>
+            {paymentConfig?.semesterTerm && (
+              <p className="text-xs text-muted-foreground">{paymentConfig.semesterTerm.nameAr} — {paymentConfig.semesterTerm.academicYear}</p>
+            )}
+            {!isPaymentConfigLoading && country && !paymentConfig?.semesterTerm && (
+              <p className="text-xs text-muted-foreground">لا يوجد فصل دراسي متاح للاشتراك حالياً.</p>
+            )}
             <ul className="text-sm space-y-2">
               <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-green-600" /> خطط غير محدودة طوال الفصل</li>
               <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-green-600" /> أوراق عمل غير محدودة</li>
@@ -135,13 +157,13 @@ export default function Subscription() {
               <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-green-600" /> أولوية في التوليد</li>
             </ul>
             <div className="flex gap-2">
-              <Button onClick={() => buySemesterMutation.mutate({ gateway: "myfatoorah" })} disabled={buySemesterMutation.isPending} className="flex-1">
+              <Button onClick={() => buySemesterMutation.mutate({ gateway: "myfatoorah" })} disabled={semesterPurchaseDisabled || !paymentConfig?.gateways.includes("myfatoorah")} className="flex-1">
                 MyFatoorah
               </Button>
-              <Button onClick={() => buySemesterMutation.mutate({ gateway: "tap" })} disabled={buySemesterMutation.isPending} className="flex-1">
+              <Button onClick={() => buySemesterMutation.mutate({ gateway: "tap" })} disabled={semesterPurchaseDisabled || !paymentConfig?.gateways.includes("tap")} className="flex-1">
                 Tap
               </Button>
-              <Button onClick={() => buySemesterMutation.mutate({ gateway: "lemonsqueezy" })} disabled={buySemesterMutation.isPending} className="flex-1">
+              <Button onClick={() => buySemesterMutation.mutate({ gateway: "lemonsqueezy" })} disabled={semesterPurchaseDisabled || !paymentConfig?.gateways.includes("lemonsqueezy")} className="flex-1">
                 الدفع بالبطاقة 💳
               </Button>
             </div>

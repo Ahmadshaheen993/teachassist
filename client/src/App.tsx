@@ -9,6 +9,8 @@ import Home from "@/pages/Home";
 import Login from "@/pages/Login";
 import GeneratePlan from "./pages/GeneratePlan";
 import MyPlans from "./pages/MyPlans";
+import PlanDetails from "./pages/PlanDetails";
+import WorksheetDetails from "./pages/WorksheetDetails";
 import Selections from "./pages/Selections";
 import Resources from "./pages/Resources";
 import Referrals from "./pages/Referrals";
@@ -21,6 +23,8 @@ function Router() {
       <Route path={"/login"} component={Login} />
       <Route path={"/"} component={Home} />
       <Route path={"/generate"} component={GeneratePlan} />
+      <Route path={"/my-plans/:id"} component={PlanDetails} />
+      <Route path={"/worksheets/:id"} component={WorksheetDetails} />
       <Route path={"/my-plans"} component={MyPlans} />
       <Route path={"/selections"} component={Selections} />
       <Route path={"/resources"} component={Resources} />

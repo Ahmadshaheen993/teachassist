@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ينشئ قالب Word وزاري بصيغة docx يحتوي على placeholders متوافقة مع docxtemplater.
+ينشئ قالب Word عربي عام بصيغة docx يحتوي على placeholders متوافقة مع docxtemplater.
 المفاتيح تطابق مخطط JSON للخطة حرفياً.
 """
 from docx import Document
@@ -8,6 +8,7 @@ from docx.shared import Pt, Cm, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 
 doc = Document()
 
@@ -72,11 +73,17 @@ for run in obj_heading.runs:
 
 doc.add_paragraph('الأهداف المعرفية:', style='List Bullet')
 # Loop placeholder for cognitive objectives
-doc.add_paragraph('{#objectives.cognitive}', style='List Bullet 2')
+doc.add_paragraph('{#objectives.cognitive}')
+doc.add_paragraph('{text}', style='List Bullet 2')
+doc.add_paragraph('{/objectives.cognitive}')
 doc.add_paragraph('الأهداف المهارية:', style='List Bullet')
-doc.add_paragraph('{#objectives.skills}', style='List Bullet 2')
+doc.add_paragraph('{#objectives.skills}')
+doc.add_paragraph('{text}', style='List Bullet 2')
+doc.add_paragraph('{/objectives.skills}')
 doc.add_paragraph('الأهداف الوجدانية:', style='List Bullet')
-doc.add_paragraph('{#objectives.affective}', style='List Bullet 2')
+doc.add_paragraph('{#objectives.affective}')
+doc.add_paragraph('{text}', style='List Bullet 2')
+doc.add_paragraph('{/objectives.affective}')
 
 # ==================== التهيئة ====================
 doc.add_paragraph('')
@@ -92,9 +99,13 @@ for run in strat_heading.runs:
     run.font.color.rgb = RGBColor(0x0d, 0x6b, 0x56)
 
 doc.add_paragraph('الاستراتيجيات:', style='List Bullet')
-doc.add_paragraph('{#strategies}', style='List Bullet 2')
+doc.add_paragraph('{#strategies}')
+doc.add_paragraph('{text}', style='List Bullet 2')
+doc.add_paragraph('{/strategies}')
 doc.add_paragraph('الوسائل التعليمية:', style='List Bullet')
-doc.add_paragraph('{#materials}', style='List Bullet 2')
+doc.add_paragraph('{#materials}')
+doc.add_paragraph('{text}', style='List Bullet 2')
+doc.add_paragraph('{/materials}')
 
 # ==================== خطوات التنفيذ ====================
 doc.add_paragraph('')
@@ -157,17 +168,23 @@ doc.add_paragraph('التقويم القبلي:', style='List Bullet')
 doc.add_paragraph('{assessment.diagnostic}')
 
 doc.add_paragraph('التقويم البنائي:', style='List Bullet')
-doc.add_paragraph('{#assessment.formative}', style='List Bullet 2')
+doc.add_paragraph('{#assessment.formative}')
+doc.add_paragraph('{text}', style='List Bullet 2')
+doc.add_paragraph('{/assessment.formative}')
 
 doc.add_paragraph('التقويم الختامي:', style='List Bullet')
-doc.add_paragraph('{#assessment.summative}', style='List Bullet 2')
+doc.add_paragraph('{#assessment.summative}')
+doc.add_paragraph('{text}', style='List Bullet 2')
+doc.add_paragraph('{/assessment.summative}')
 
 # ==================== القيم التربوية ====================
 doc.add_paragraph('')
 val_heading = doc.add_heading('القيم التربوية', level=1)
 for run in val_heading.runs:
     run.font.color.rgb = RGBColor(0x0d, 0x6b, 0x56)
-doc.add_paragraph('{#values}', style='List Bullet')
+doc.add_paragraph('{#values}')
+doc.add_paragraph('{text}', style='List Bullet')
+doc.add_paragraph('{/values}')
 
 # ==================== الدمج التكنولوجي ====================
 doc.add_paragraph('')
@@ -229,8 +246,33 @@ sig_table.rows[1].cells[0].text = ' '
 sig_table.rows[1].cells[1].text = ' '
 sig_table.rows[1].cells[2].text = ' '
 
+# اتجاه الفقرات والجداول مستقل عن اتجاه الحروف، ومطلوب لتخطيط عربي سليم.
+def set_rtl(paragraph):
+    props = paragraph._p.get_or_add_pPr()
+    bidi = OxmlElement('w:bidi')
+    bidi.set(qn('w:val'), '1')
+    props.append(bidi)
+    if paragraph.alignment in (None, WD_ALIGN_PARAGRAPH.RIGHT):
+        # Logical start aligns RTL text on the right in Word 2010+ and
+        # LibreOffice. The legacy "right" value is mirrored by LibreOffice.
+        props.get_or_add_jc().set(qn('w:val'), 'start')
+    for run in paragraph.runs:
+        fonts = run._r.get_or_add_rPr().get_or_add_rFonts()
+        fonts.set(qn('w:cs'), 'Arial')
+
+for paragraph in doc.paragraphs:
+    set_rtl(paragraph)
+for table in doc.tables:
+    bidi_visual = OxmlElement('w:bidiVisual')
+    table._tbl.tblPr.append(bidi_visual)
+    for row in table.rows:
+        for cell in row.cells:
+            for paragraph in cell.paragraphs:
+                set_rtl(paragraph)
+
 # حفظ الملف
-output_path = '/home/ubuntu/teacher-assistant/server/templates/plan_template_qa.docx'
+from pathlib import Path
+output_path = str(Path(__file__).resolve().parent / 'templates' / 'plan_template_qa.docx')
 import os
 os.makedirs(os.path.dirname(output_path), exist_ok=True)
 doc.save(output_path)

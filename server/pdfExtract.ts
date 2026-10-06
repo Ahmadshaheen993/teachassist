@@ -1,109 +1,68 @@
-/**
- * PDF Text Extraction Module
- *
- * Extracts text from PDF files for the smart indexing feature.
- * Uses pdf-parse (a lightweight PDF text extractor).
- */
+/** Extract selectable PDF text for the smart indexer using Poppler. */
+import { execFile } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
-import { exec } from "child_process";
-import { promisify } from "util";
-import { existsSync, mkdirSync, writeFileSync, unlinkSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+const MAX_PDF_BYTES = 50 * 1024 * 1024;
+const MAX_PAGES = 200;
+const EXTRACTION_TIMEOUT_MS = 60_000;
+const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 
-const execAsync = promisify(exec);
-
-/**
- * Extract text from a PDF buffer using pdftotext (poppler-utils).
- * Limits extraction to the first `maxPages` pages.
- *
- * @param pdfBuffer - The PDF file as a Buffer
- * @param maxPages - Maximum number of pages to extract (default 30)
- * @returns Extracted text content
- */
+/** Extract at most `maxPages` pages; image-only scans require external OCR. */
 export async function extractPdfText(pdfBuffer: Buffer, maxPages: number = 30): Promise<string> {
-  // Write buffer to a temporary file
-  const tmpDir = tmpdir();
-  const tmpFile = join(tmpDir, `pdf_extract_${Date.now()}.pdf`);
-  const outFile = join(tmpDir, `pdf_text_${Date.now()}.txt`);
-
-  try {
-    writeFileSync(tmpFile, pdfBuffer);
-
-    // Use pdftotext from poppler-utils (pre-installed in the sandbox)
-    // -f = first page, -l = last page
-    const { stdout, stderr } = await execAsync(
-      `pdftotext -f 1 -l ${maxPages} -enc UTF-8 "${tmpFile}" "${outFile}" 2>&1`
-    );
-
-    if (!existsSync(outFile)) {
-      throw new Error(`pdftotext failed: ${stderr || stdout || "no output"}`);
-    }
-
-    // Read the extracted text
-    const { readFileSync } = await import("fs");
-    const text = readFileSync(outFile, "utf-8");
-
-    return text;
-  } catch (error: any) {
-    // Fallback: try using Python pdf2image + pytesseract if pdftotext fails
-    console.error("[pdfExtract] pdftotext failed, trying fallback:", error.message);
-    return extractPdfTextFallback(pdfBuffer, maxPages);
-  } finally {
-    // Cleanup temp files
-    try { unlinkSync(tmpFile); } catch {}
-    try { unlinkSync(outFile); } catch {}
+  if (!Buffer.isBuffer(pdfBuffer) || !pdfBuffer.subarray(0, 5).equals(Buffer.from("%PDF-"))) {
+    throw new Error("الملف ليس ملف PDF صالحاً. ارفع ملف PDF يحتوي على نص قابل للتحديد.");
   }
-}
+  if (pdfBuffer.length > MAX_PDF_BYTES) {
+    throw new Error("حجم ملف PDF يتجاوز الحد المسموح وهو 50 ميغابايت.");
+  }
+  if (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > MAX_PAGES) {
+    throw new Error("عدد الصفحات يجب أن يكون عدداً صحيحاً من 1 إلى 200.");
+  }
 
-/**
- * Fallback: Extract text using Python's pdfplumber or PyPDF2.
- */
-async function extractPdfTextFallback(pdfBuffer: Buffer, maxPages: number): Promise<string> {
-  const tmpDir = tmpdir();
-  const tmpFile = join(tmpDir, `pdf_fallback_${Date.now()}.pdf`);
-
+  const directory = await mkdtemp(join(tmpdir(), "teachassist-pdf-"));
   try {
-    writeFileSync(tmpFile, pdfBuffer);
+    const inputPath = join(directory, "input.pdf");
+    await writeFile(inputPath, pdfBuffer, { mode: 0o600 });
 
-    const script = `
-import sys
-try:
-    import pdfplumber
-    with pdfplumber.open(sys.argv[1]) as pdf:
-        text = []
-        for i, page in enumerate(pdf.pages[:${maxPages}]):
-            text.append(page.extract_text() or "")
-        print("\\n\\n".join(text))
-except ImportError:
-    try:
-        from PyPDF2 import PdfReader
-        reader = PdfReader(sys.argv[1])
-        text = []
-        for i, page in enumerate(reader.pages[:${maxPages}]):
-            text.append(page.extract_text() or "")
-        print("\\n\\n".join(text))
-    except ImportError:
-        print("ERROR: No PDF library available", file=sys.stderr)
-        sys.exit(1)
-`;
-
-    const scriptFile = join(tmpDir, `extract_${Date.now()}.py`);
-    writeFileSync(scriptFile, script);
-
-    const { stdout, stderr } = await execAsync(`python3 "${scriptFile}" "${tmpFile}" 2>&1`);
-
-    try { unlinkSync(scriptFile); } catch {}
-
-    if (stdout.startsWith("ERROR:")) {
-      throw new Error(stdout);
+    let text: string;
+    try {
+      // A fixed executable and separate arguments prevent shell interpolation.
+      // Writing to stdout also bounds extracted text through maxBuffer.
+      text = await new Promise<string>((resolve, reject) => {
+        execFile(
+          "pdftotext",
+          ["-f", "1", "-l", String(maxPages), "-enc", "UTF-8", inputPath, "-"],
+          {
+            encoding: "utf8",
+            timeout: EXTRACTION_TIMEOUT_MS,
+            maxBuffer: MAX_OUTPUT_BYTES,
+            shell: false,
+          },
+          (error, stdout) => error ? reject(error) : resolve(stdout),
+        );
+      });
+    } catch (error) {
+      const processError = error as NodeJS.ErrnoException & { killed?: boolean };
+      if (processError.code === "ENOENT") {
+        throw new Error("استخراج نص PDF غير متاح حالياً لأن أداة Poppler (pdftotext) غير مثبتة على الخادم.");
+      }
+      if (processError.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
+        throw new Error("النص المستخرج من PDF كبير جداً. جرّب تقليل عدد الصفحات.");
+      }
+      if (processError.killed) {
+        throw new Error("استغرق استخراج نص PDF وقتاً طويلاً. جرّب تقليل عدد الصفحات أو رفع ملف أصغر.");
+      }
+      // Do not expose process output, local paths or raw parser errors.
+      throw new Error("تعذّر استخراج نص PDF. تأكد من سلامة الملف وأنه غير محمي بكلمة مرور.");
     }
 
-    return stdout;
-  } catch (error: any) {
-    console.error("[pdfExtract] Fallback also failed:", error.message);
-    throw new Error(`PDF text extraction failed: ${error.message}. Install poppler-utils or pdfplumber.`);
+    if (!text.trim()) {
+      throw new Error("لا يحتوي PDF على نص قابل للاستخراج. إذا كان مسحاً ضوئياً أو صوراً، حوّله إلى نص باستخدام OCR ثم أعد رفعه؛ الفهرسة الحالية لا تدعم OCR.");
+    }
+    return text;
   } finally {
-    try { unlinkSync(tmpFile); } catch {}
+    await rm(directory, { recursive: true, force: true });
   }
 }

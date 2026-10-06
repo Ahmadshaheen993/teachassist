@@ -1,67 +1,87 @@
-# Railway — متغيرات البيئة المطلوبة
+# إعداد بيئة Railway — TeachAssist
 
-انسخ هذه المتغيرات إلى Railway → Settings → Variables:
+هذه الإعدادات تخص الكود الحالي؛ حالة القبول وخطوات Staging في [COMPLETION_STATUS.md](COMPLETION_STATUS.md). لا تُفعّل المصادقة المستقلة أو الدفع بمجرد إضافة المفاتيح.
 
-## أساسي (مطلوب فوراً)
+نجح [CI Run 37519688020](https://github.com/Ahmadshaheen993/teachassist/actions/runs/37519688020) بجميع **167/167 اختباراً في 11 ملفاً**، مع تطبيق وإعادة ترحيلات MySQL على قاعدة اختبار مؤقتة. لا يتحقق هذا التشغيل من إعدادات Railway أو وصول البريد أو تشغيل مزودي الخدمات الفعلي؛ قبول هذه البيئة ما زال مطلوباً.
 
+## الخادم
+
+```dotenv
+NODE_ENV=production
+DATABASE_URL=[رابط قاعدة البيئة المقصودة]
+APP_BASE_URL=[رابط HTTPS الفعلي للتطبيق في هذه البيئة]
+JWT_SECRET=[مفتاح عشوائي طويل لمسار Manus القديم]
+AUTH_OTP_ENABLED=false
+PAYMENTS_ENABLED=false
 ```
-DATABASE_URL                = [سلسلة TiDB من الخطوة 2]
-JWT_SECRET                  = [openssl rand -hex 32]
-APP_BASE_URL                = https://prep.q-genius.com
-NODE_ENV                    = production
-PAYMENTS_ENABLED            = false
+
+يجب أن يكون `APP_BASE_URL` رابطاً صحيحاً يشمل البروتوكول والمضيف، مثل رابط Staging الخاص بك، دون مسار فرعي أو query. لا تضع رابط الإنتاج في إعداد Staging. اترك Railway يحدد `PORT`؛ يستمع الخادم على `0.0.0.0`.
+
+## المصادقة المستقلة بالبريد
+
+```dotenv
+AUTH_OTP_SECRET=[مفتاح عشوائي مستقل لا يقل عن 32 حرفاً]
+RESEND_API_KEY=[مفتاح Resend لهذه البيئة]
+FROM_EMAIL=[عنوان إرسال على نطاق موثق لدى Resend]
 ```
+
+مزود البريد المنفذ هو Resend عبر HTTP، وليس SMTP. لا توجد مصادقة SMS في هذا الإصدار. `AUTH_OTP_SECRET` هو مفتاح HMAC للرموز؛ يمكن أن يستخدم الخادم `JWT_SECRET` بديلاً إذا لم يُخصص مفتاح OTP، لكن يُفضل تخصيص مفتاح مستقل. لا تُسجل أي مفتاح في المستودع.
+
+تبقى `AUTH_OTP_ENABLED=false` إلى حين مراجعة بيانات المستخدمين وسجل ترحيلات قاعدة Staging، وتطبيق `drizzle/0003_independent_auth.sql` المتتبع، ثم اختبار وصول البريد والدخول والخروج والقفل وربط الحسابات. ضبط مفاتيح Resend وحده لا يشغّل OTP. لا يُطبّق الترحيل تلقائياً عند تشغيل الخدمة.
+
+قبل قبول Staging، راجع أيضاً تعامل الوكيل العكسي مع HTTPS وعنوان العميل، وأن النطاق الذي يرسل منه المتصفح مطابق لـ`APP_BASE_URL`. في الإنتاج يرفض إعداد المصادقة رابط أصل HTTP.
+
+`AUTH_TRUST_PROXY_HOPS` إعداد اختياري يقبل `1` أو `2` فقط. لا تضبطه قبل التحقق من سلسلة الوكلاء الفعلية وأن الخدمة لا يمكن الوصول إليها عبر مسار أقصر؛ لا توجد قيمة افتراضية موصى بها. من دون إعداد موثوق، تتشارك الطلبات العابرة للوكيل حدود IP الخاصة بالوكيل.
+
+ضمن اختبار Staging، استخدم عميلين من شبكتين بعنوانَي IP مختلفين وبريدَي اختبار مملوكين مختلفين، وتحقق من صحة عنوان كل منهما في `req.ip` واستقلال حصص IP لطلب الرموز والتحقق، ومن أن headers المزوّرة من العميل لا تغيّر الهوية المعتمدة. حدود البريد نفسه وقفل المحاولات تظل مشتركة بين العملاء. تفاصيل التحقق في [AUTH_STAGING.md](AUTH_STAGING.md). لا تعتبر نجاح تجربة عميل واحد دليلاً كافياً على جاهزية حدود IP.
+
+## الحفاظ على تسجيل الدخول القديم أثناء الانتقال
+
+```dotenv
+VITE_APP_ID=[معرف Manus الحالي]
+OAUTH_SERVER_URL=[خادم OAuth الأصلي من Manus]
+VITE_OAUTH_PORTAL_URL=[بوابة تسجيل الدخول الأصلية من Manus]
+OWNER_OPEN_ID=[معرف مالك المشروع الحالي إن كان مستخدماً]
+OWNER_NAME=[اسم المالك إن كان مستخدماً]
+```
+
+حافظ على القيم الأصلية إن أردت توفير Manus مؤقتاً إلى جانب OTP. رابط Railway ليس بديلاً عن `OAUTH_SERVER_URL`. عند غياب إعدادات OAuth الكاملة وبقاء OTP مغلقاً، لا تتوفر طريقة دخول مستقلة جاهزة. لا تحذف المسار القديم قبل نجاح تجربة حسابات المعلمين على النظام الجديد.
 
 ## الذكاء الاصطناعي
 
-```
-ANTHROPIC_API_KEY           = [مفتاحك المباشر من Anthropic]
-```
-
-## Google Drive
-
-```
-GOOGLE_DRIVE_API_KEY        = [مفتاح API]
-GOOGLE_SERVICE_ACCOUNT_JSON = [JSON حساب الخدمة]
+```dotenv
+ANTHROPIC_API_KEY=[مفتاح Anthropic]
 ```
 
-## Cloudflare R2 (تخزين الملفات)
+للاستمرار عبر Manus Forge بدلاً من المفتاح المباشر، يحتاج مسار Forge إلى `BUILT_IN_FORGE_API_URL` و`BUILT_IN_FORGE_API_KEY`. صلاحية المفاتيح وحدود الاستخدام وجودة التوليد تحتاج تجربة فعلية على Staging.
 
-```
-R2_ACCOUNT_ID               = [من لوحة Cloudflare → R2]
-R2_ACCESS_KEY_ID            = [من R2 → Manage API Tokens]
-R2_SECRET_ACCESS_KEY        = [مفتاح الوصول السري]
-R2_BUCKET                   = teachassist
-R2_PUBLIC_BASE_URL          = [اختياري: دومين عام للحاوية]
-```
+## Google Drive والمناهج
 
-## المصادقة المستقلة (AUTH_SPEC_V2 — لاحقاً)
-
-```
-SMTP_HOST                   = [مزود البريد]
-SMTP_PORT                   = 465
-SMTP_USER                   = [اسم المستخدم]
-SMTP_PASS                   = [كلمة المرور]
-FROM_EMAIL                  = noreply@q-genius.com
-OTP_EXPIRY_MINUTES          = 5
-OTP_MAX_ATTEMPTS            = 5
+```dotenv
+GOOGLE_DRIVE_API_KEY=[مفتاح Drive عند استخدام الوصول بمفتاح API]
+GOOGLE_SERVICE_ACCOUNT_JSON=[JSON حساب الخدمة عند استخدامه]
 ```
 
-## الدفع (لاحقاً — عند تفعيل البوابات)
+راجع وصول الحساب إلى مجلدات الكتب المطلوبة واعتماد الفهارس قبل إتاحتها للمعلمين.
 
-```
-MYFATOORAH_BASE_URL         = https://api.myfatoorah.com
-MYFATOORAH_API_KEY          = [مفتاح MyFatoorah]
-TAP_BASE_URL                = https://api.tap.company
-TAP_SECRET_KEY              = [مفتاح Tap]
+## Cloudflare R2 — عند استخدام ملفات أو قوالب مرفوعة
+
+```dotenv
+R2_ACCOUNT_ID=[معرف حساب R2]
+R2_ACCESS_KEY_ID=[مفتاح وصول الحاوية]
+R2_SECRET_ACCESS_KEY=[سر المفتاح]
+R2_BUCKET=[اسم الحاوية]
+R2_PUBLIC_BASE_URL=[اختياري: رابط عام للحاوية]
 ```
 
-## متغيرات Manus (تبقى مؤقتاً حتى اكتمال AUTH_SPEC_V2)
+تنزيل Word بالقالب المدمج يتم مباشرة من مسار مصادق عليه ولا يتطلب R2. القوالب أو الملفات المخزنة في R2 تحتاج الإعدادات الأربعة الأولى؛ إذا لم يُضبط رابط عام، تستخدم القراءة روابط موقعة مؤقتة.
 
-```
-VITE_APP_ID                 = [معرّف التطبيق الحالي]
-VITE_OAUTH_PORTAL_URL       = [بوابة تسجيل الدخول الحالية]
-OAUTH_SERVER_URL            = [خادم OAuth الحالي]
-OWNER_OPEN_ID               = [معرّف المالك]
-OWNER_NAME                  = [اسم المالك]
-```
+تحويل PDF يحتاج LibreOffice في صورة الخادم، واستخراج نص الكتب يحتاج `pdftotext`. عند تعذر PDF يعرض التطبيق معاينة HTML للطباعة؛ نجاح معاينة الطباعة لا يثبت نجاح تحويل PDF الفعلي.
+
+## الدفع
+
+تبقى `PAYMENTS_ENABLED=false`. قائمة المزودين المعتمدين في الكود فارغة؛ حتى تعيين المتغير إلى `true` لا يفتح شراءً أو يقبل webhook للتفعيل. إضافة مفاتيح MyFatoorah أو Tap أو Lemon Squeezy لا تتجاوز هذا الحاجز. تفعيل أي مزود يحتاج مراجعة كود مستقلة واعتماد حساب التاجر واختبارات Sandbox وتسوية وترحيلات مالية مقبولة؛ PR الدفع #3 يبقى Draft خارج عمل المصادقة والتوليد الحالي.
+
+## متغيرات الاختبار ليست إعدادات استضافة
+
+`AUTH_TEST_DATABASE_URL` مخصص لقاعدة MySQL محلية مؤقتة باسم `teachassist_test` في CI أو تطوير محلي. لا تضفه إلى إعدادات Railway ولا تستخدم فيه رابط Staging أو الإنتاج. مساعد الترحيل والاختبارات يرفضان المضيف الخارجي قبل الاتصال.

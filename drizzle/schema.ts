@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, json, boolean, decimal, date } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, json, boolean, decimal, date, index } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -295,6 +295,27 @@ export const otpCodes = mysqlTable("otp_codes", {
   consumedAt: timestamp("consumedAt"),
   attempts: int("attempts").notNull().default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, table => ({ emailCreated: index("otp_email_created").on(table.email, table.createdAt) }));
 
 export type OtpCode = typeof otpCodes.$inferSelect;
+
+// Hash-only identity keys serialize OTP issue/verify across server instances.
+export const authIdentityLimits = mysqlTable("auth_identity_limits", {
+  keyId: varchar("keyId", { length: 80 }).primaryKey(),
+  requestWindowAt: timestamp("requestWindowAt").notNull(),
+  requestCount: int("requestCount").notNull().default(0),
+  verifyWindowAt: timestamp("verifyWindowAt").notNull(),
+  verifyCount: int("verifyCount").notNull().default(0),
+  lastIssuedAt: timestamp("lastIssuedAt"),
+  lockedUntil: timestamp("lockedUntil"),
+});
+export type AuthIdentityLimit = typeof authIdentityLimits.$inferSelect;
+
+export const authSessions = mysqlTable("auth_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  tokenHash: varchar("tokenHash", { length: 64 }).notNull().unique(),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  revokedAt: timestamp("revokedAt"),
+}, table => ({ userCreated: index("auth_sessions_user_created").on(table.userId, table.createdAt) }));
