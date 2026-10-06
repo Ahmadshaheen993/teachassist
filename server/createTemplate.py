@@ -252,8 +252,10 @@ def set_rtl(paragraph):
     bidi = OxmlElement('w:bidi')
     bidi.set(qn('w:val'), '1')
     props.append(bidi)
-    if paragraph.alignment is None:
-        paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    if paragraph.alignment in (None, WD_ALIGN_PARAGRAPH.RIGHT):
+        # Logical start aligns RTL text on the right in Word 2010+ and
+        # LibreOffice. The legacy "right" value is mirrored by LibreOffice.
+        props.get_or_add_jc().set(qn('w:val'), 'start')
     for run in paragraph.runs:
         fonts = run._r.get_or_add_rPr().get_or_add_rFonts()
         fonts.set(qn('w:cs'), 'Arial')

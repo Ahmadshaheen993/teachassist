@@ -198,7 +198,9 @@ function xml(value: unknown): string {
 
 function paragraph(text: unknown, bold = false): string {
   const lines = String(text ?? "").split(/\r?\n/);
-  return `<w:p><w:pPr><w:bidi/><w:jc w:val="right"/><w:spacing w:after="150"/></w:pPr><w:r><w:rPr><w:rtl/><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>${bold ? "<w:b/><w:bCs/>" : ""}<w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>${lines.map((line, index) => `${index ? "<w:br/>" : ""}<w:t xml:space="preserve">${xml(line)}</w:t>`).join("")}</w:r></w:p>`;
+  // Logical start keeps RTL paragraphs at the right margin in Word and
+  // LibreOffice; LibreOffice mirrors the legacy "right" value when bidi is set.
+  return `<w:p><w:pPr><w:bidi/><w:jc w:val="start"/><w:spacing w:after="150"/></w:pPr><w:r><w:rPr><w:rtl/><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>${bold ? "<w:b/><w:bCs/>" : ""}<w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>${lines.map((line, index) => `${index ? "<w:br/>" : ""}<w:t xml:space="preserve">${xml(line)}</w:t>`).join("")}</w:r></w:p>`;
 }
 
 /** A real OOXML worksheet, with answers starting on a separate page. */
