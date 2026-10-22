@@ -1,0 +1,73 @@
+<template>
+  <style>
+      @font-face { font-family: "Cairo"; font-style: normal; font-weight: 200 1000; font-display: block;
+        src: url("assets/fonts/cairo-arabic.woff2") format("woff2");
+        unicode-range: U+0600-06FF, U+0750-077F, U+0870-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
+      @font-face { font-family: "Cairo"; font-style: normal; font-weight: 200 1000; font-display: block;
+        src: url("assets/fonts/cairo-latin.woff2") format("woff2");
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+      @font-face { font-family: "Cairo"; font-style: normal; font-weight: 200 1000; font-display: block;
+        src: url("assets/fonts/cairo-latin-ext.woff2") format("woff2");
+        unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+
+    #root { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+    .cg { position: absolute; left: 0; right: 0; top: 1232px; height: 110px; display: flex; flex-direction: row;
+          align-items: baseline; justify-content: center; gap: 0.32em; direction: rtl; unicode-bidi: isolate;
+          font-family: "Cairo", sans-serif; font-weight: 700; font-size: 54px;
+          line-height: 1.3; color: #FFFDF8; white-space: nowrap; opacity: 0; visibility: hidden;
+          -webkit-text-stroke: 2.2px rgba(20, 22, 24, 0.82); paint-order: stroke fill;
+          text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5), 0 0 3px rgba(0, 0, 0, 0.55); }
+    .cg.big { font-size: 76px; font-weight: 800; top: 1218px; }
+    .cg .w { display: inline-block; opacity: 0; will-change: transform, opacity; }
+    .cg .w.warm { color: #F07A2E; }
+    .cg .w.cool { color: #9BE0E6; }
+    .cg .w.hero { font-size: 1.22em; font-weight: 900; }
+  </style>
+  <div data-hf-id="hf-rvsi" id="root" data-composition-id="caps" data-width="1080" data-height="1920">
+    <div data-hf-id="hf-krjr" id="caps-stage" data-layout-allow-caption-zone></div>
+  </div>
+  <script>
+    (function () {
+      "use strict";
+      var GROUPS = [{"seg": "s1", "start": 0.0, "end": 1.1333, "accent": null, "tone": null, "big": false, "words": [{"id": "w0", "text": "كثير", "start": 0.1, "end": 0.2667}, {"id": "w1", "text": "من", "start": 0.2667, "end": 0.3667}, {"id": "w2", "text": "الطلاب", "start": 0.3667, "end": 1.0}]}, {"seg": "s2", "start": 4.3667, "end": 5.6667, "accent": 10, "tone": "warm", "big": false, "words": [{"id": "w9", "text": "يصيبه", "start": 4.4, "end": 4.7667}, {"id": "w10", "text": "الارتباك", "start": 4.7667, "end": 5.6}]}, {"seg": "s2", "start": 5.6667, "end": 7.2, "accent": 12, "tone": "warm", "big": false, "words": [{"id": "w11", "text": "ويصيبه", "start": 5.7, "end": 6.4333}, {"id": "w12", "text": "القلق", "start": 6.4333, "end": 7.0667}]}, {"seg": "s2", "start": 7.2, "end": 7.9, "accent": 13, "tone": "warm", "big": true, "words": [{"id": "w13", "text": "لماذا؟", "start": 7.2333, "end": 7.8}]}, {"seg": "s2", "start": 7.9, "end": 8.9667, "accent": 14, "tone": "cool", "big": false, "words": [{"id": "w14", "text": "أولًا", "start": 7.9333, "end": 8.2667}, {"id": "w15", "text": "لأنه", "start": 8.2667, "end": 8.9667}]}, {"seg": "s3", "start": 13.4667, "end": 14.6, "accent": null, "tone": null, "big": false, "words": [{"id": "w24", "text": "وبالإضافة", "start": 13.5, "end": 14.2}, {"id": "w25", "text": "إلى", "start": 14.2, "end": 14.5333}]}, {"seg": "s4", "start": 16.8, "end": 18.4667, "accent": 32, "tone": "warm", "big": false, "words": [{"id": "w29", "text": "ونحن", "start": 16.8333, "end": 17.1333}, {"id": "w30", "text": "في", "start": 17.1333, "end": 17.4333}, {"id": "w31", "text": "هذه", "start": 17.4667, "end": 17.7333}, {"id": "w32", "text": "المنصة", "start": 17.7333, "end": 18.3667}]}, {"seg": "s4", "start": 18.4667, "end": 19.9667, "accent": null, "tone": null, "big": false, "words": [{"id": "w33", "text": "سنقوم", "start": 18.5333, "end": 18.9333}, {"id": "w34", "text": "بإذن", "start": 18.9333, "end": 19.1667}, {"id": "w35", "text": "الله", "start": 19.1667, "end": 19.3333}, {"id": "w36", "text": "تعالى", "start": 19.3333, "end": 19.8667}]}, {"seg": "s5", "start": 23.3667, "end": 25.2333, "accent": 44, "tone": "warm", "big": true, "words": [{"id": "w43", "text": "ليخرج", "start": 23.4333, "end": 24.0}, {"id": "w44", "text": "عالمًا", "start": 24.0, "end": 25.2667}]}, {"seg": "s5", "start": 25.2333, "end": 27.6, "accent": null, "tone": null, "big": false, "words": [{"id": "w45", "text": "في", "start": 25.2667, "end": 25.5333}, {"id": "w46", "text": "أمور", "start": 25.8333, "end": 26.5667}, {"id": "w47", "text": "اللغة", "start": 26.5667, "end": 27.1333}, {"id": "w48", "text": "العربية", "start": 27.1333, "end": 27.6333}]}, {"seg": "s5", "start": 27.6, "end": 28.5, "accent": null, "tone": null, "big": false, "words": [{"id": "w49", "text": "الخاصة", "start": 27.6333, "end": 28.4}]}];
+      var stage = document.getElementById("caps-stage");
+      var tl = gsap.timeline({ paused: true });
+      var IN = 0.1, SETTLE = 10;  // 3 frames, 10 px settle
+      GROUPS.forEach(function (g, gi) {
+        var el = document.createElement("div");
+        el.id = "cg-" + gi; el.className = "cg" + (g.big ? " big" : "");
+        el.setAttribute("dir", "rtl");
+        var spans = g.words.map(function (w, wi) {
+          var sp = document.createElement("span");
+          sp.id = "cg-" + gi + "-w" + wi; sp.className = "w";
+          sp.textContent = w.text;
+          if (g.accent !== null && w.id === "w" + g.accent) sp.className += " " + (g.tone || "warm") + (g.big ? " hero" : "");
+          el.appendChild(sp);
+          return sp;
+        });
+        stage.appendChild(el);
+        // group container: on at its start, hard kill at its end
+        tl.set(el, { opacity: 1, visibility: "visible" }, g.start);
+        g.words.forEach(function (w, wi) {
+          var sp = spans[wi];
+          tl.fromTo(sp, { opacity: 0, y: SETTLE }, { opacity: 1, y: 0, duration: IN, ease: "power2.out" }, w.start);
+          // earlier words settle to 55% when this word arrives
+          if (wi > 0) {
+            tl.to(spans.slice(0, wi), { opacity: 0.55, duration: IN, ease: "power1.out" }, w.start);
+          }
+        });
+        tl.to(el, { opacity: 0, duration: 0.1, ease: "power2.in" }, Math.max(g.start + 0.2, g.end - 0.1));
+        tl.set(el, { opacity: 0, visibility: "hidden" }, g.end);
+      });
+      // self-lint: no group may survive its end
+      GROUPS.forEach(function (g, gi) {
+        var el = document.getElementById("cg-" + gi);
+        tl.seek(g.end + 0.01);
+        var cs = window.getComputedStyle(el);
+        if (cs.opacity !== "0" && cs.visibility !== "hidden") console.warn("[caption-lint] group " + gi + " still visible at " + (g.end + 0.01).toFixed(2));
+      });
+      tl.seek(0);
+      window.__timelines["caps"] = tl;
+    })();
+  </script>
+</template>

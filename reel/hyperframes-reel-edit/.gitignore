@@ -1,0 +1,5 @@
+# HyperFrames artifacts (snapshots, caches) and timestamped renders are regenerated; project history stays local
+.hyperframes/
+renders/*
+!renders/preview_draft.mp4
+node_modules/

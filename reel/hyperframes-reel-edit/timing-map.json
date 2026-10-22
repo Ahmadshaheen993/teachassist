@@ -1,0 +1,474 @@
+{
+ "fps": 30,
+ "source": {
+  "file": "../rawreel.mp4",
+  "duration": 35.133
+ },
+ "output": {
+  "duration": 31.34,
+  "frames": 940
+ },
+ "segments": [
+  {
+   "id": "s1",
+   "kind": "aroll",
+   "scene": null,
+   "src_in": 0.1,
+   "src_out": 1.33,
+   "out_start": 0.0,
+   "out_end": 1.23,
+   "duration": 1.23,
+   "pieces": [
+    {
+     "src_in": 0.1,
+     "src_out": 1.33,
+     "out_start": 0.0,
+     "out_end": 1.23,
+     "duration": 1.23
+    }
+   ],
+   "note": "hook; frame 0.40 held for the first 0.30 s (source fade-in)"
+  },
+  {
+   "id": "g1",
+   "kind": "graphic",
+   "scene": "q",
+   "src_in": 1.33,
+   "src_out": 4.77,
+   "out_start": 1.23,
+   "out_end": 4.33,
+   "duration": 3.1,
+   "pieces": [
+    {
+     "src_in": 1.33,
+     "src_out": 3.11,
+     "out_start": 1.23,
+     "out_end": 3.01,
+     "duration": 1.78
+    },
+    {
+     "src_in": 3.45,
+     "src_out": 4.77,
+     "out_start": 3.01,
+     "out_end": 4.33,
+     "duration": 1.32
+    }
+   ],
+   "note": null
+  },
+  {
+   "id": "s2",
+   "kind": "aroll",
+   "scene": null,
+   "src_in": 5.64,
+   "src_out": 10.76,
+   "out_start": 4.33,
+   "out_end": 8.98,
+   "duration": 4.65,
+   "pieces": [
+    {
+     "src_in": 5.64,
+     "src_out": 8.46,
+     "out_start": 4.33,
+     "out_end": 7.15,
+     "duration": 2.82
+    },
+    {
+     "src_in": 8.69,
+     "src_out": 9.41,
+     "out_start": 7.15,
+     "out_end": 7.87,
+     "duration": 0.72
+    },
+    {
+     "src_in": 9.65,
+     "src_out": 10.76,
+     "out_start": 7.87,
+     "out_end": 8.98,
+     "duration": 1.11
+    }
+   ],
+   "note": null
+  },
+  {
+   "id": "g2",
+   "kind": "graphic",
+   "scene": "method",
+   "src_in": 10.76,
+   "src_out": 15.39,
+   "out_start": 8.98,
+   "out_end": 13.41,
+   "duration": 4.43,
+   "pieces": [
+    {
+     "src_in": 10.76,
+     "src_out": 13.33,
+     "out_start": 8.98,
+     "out_end": 11.55,
+     "duration": 2.57
+    },
+    {
+     "src_in": 13.53,
+     "src_out": 15.39,
+     "out_start": 11.55,
+     "out_end": 13.41,
+     "duration": 1.86
+    }
+   ],
+   "note": null
+  },
+  {
+   "id": "s3",
+   "kind": "aroll",
+   "scene": null,
+   "src_in": 15.65,
+   "src_out": 16.84,
+   "out_start": 13.41,
+   "out_end": 14.6,
+   "duration": 1.19,
+   "pieces": [
+    {
+     "src_in": 15.65,
+     "src_out": 16.84,
+     "out_start": 13.41,
+     "out_end": 14.6,
+     "duration": 1.19
+    }
+   ],
+   "note": null
+  },
+  {
+   "id": "g3",
+   "kind": "graphic",
+   "scene": "boring",
+   "src_in": 17.45,
+   "src_out": 19.82,
+   "out_start": 14.6,
+   "out_end": 16.75,
+   "duration": 2.15,
+   "pieces": [
+    {
+     "src_in": 17.45,
+     "src_out": 18.13,
+     "out_start": 14.6,
+     "out_end": 15.28,
+     "duration": 0.68
+    },
+    {
+     "src_in": 18.35,
+     "src_out": 19.82,
+     "out_start": 15.28,
+     "out_end": 16.75,
+     "duration": 1.47
+    }
+   ],
+   "note": null
+  },
+  {
+   "id": "s4",
+   "kind": "aroll",
+   "scene": null,
+   "src_in": 20.02,
+   "src_out": 23.52,
+   "out_start": 16.75,
+   "out_end": 20.08,
+   "duration": 3.33,
+   "pieces": [
+    {
+     "src_in": 20.02,
+     "src_out": 21.71,
+     "out_start": 16.75,
+     "out_end": 18.44,
+     "duration": 1.69
+    },
+    {
+     "src_in": 21.88,
+     "src_out": 23.52,
+     "out_start": 18.44,
+     "out_end": 20.08,
+     "duration": 1.64
+    }
+   ],
+   "note": null
+  },
+  {
+   "id": "g4",
+   "kind": "graphic",
+   "scene": "simplify",
+   "src_in": 23.52,
+   "src_out": 26.94,
+   "out_start": 20.08,
+   "out_end": 23.34,
+   "duration": 3.26,
+   "pieces": [
+    {
+     "src_in": 23.52,
+     "src_out": 24.48,
+     "out_start": 20.08,
+     "out_end": 21.04,
+     "duration": 0.96
+    },
+    {
+     "src_in": 24.64,
+     "src_out": 26.94,
+     "out_start": 21.04,
+     "out_end": 23.34,
+     "duration": 2.3
+    }
+   ],
+   "note": null
+  },
+  {
+   "id": "s5",
+   "kind": "aroll",
+   "scene": null,
+   "src_in": 27.15,
+   "src_out": 32.37,
+   "out_start": 23.34,
+   "out_end": 28.56,
+   "duration": 5.22,
+   "pieces": [
+    {
+     "src_in": 27.15,
+     "src_out": 32.37,
+     "out_start": 23.34,
+     "out_end": 28.56,
+     "duration": 5.22
+    }
+   ],
+   "note": null
+  },
+  {
+   "id": "g5",
+   "kind": "graphic",
+   "scene": "final",
+   "src_in": 32.37,
+   "src_out": 35.15,
+   "out_start": 28.56,
+   "out_end": 31.34,
+   "duration": 2.78,
+   "pieces": [
+    {
+     "src_in": 32.37,
+     "src_out": 35.15,
+     "out_start": 28.56,
+     "out_end": 31.34,
+     "duration": 2.78
+    }
+   ],
+   "note": null
+  }
+ ],
+ "retained": [
+  {
+   "src_in": 0.1,
+   "src_out": 1.33,
+   "out_start": 0.0,
+   "out_end": 1.23,
+   "segment": "s1"
+  },
+  {
+   "src_in": 1.33,
+   "src_out": 3.11,
+   "out_start": 1.23,
+   "out_end": 3.01,
+   "segment": "g1"
+  },
+  {
+   "src_in": 3.45,
+   "src_out": 4.77,
+   "out_start": 3.01,
+   "out_end": 4.33,
+   "segment": "g1"
+  },
+  {
+   "src_in": 5.64,
+   "src_out": 8.46,
+   "out_start": 4.33,
+   "out_end": 7.15,
+   "segment": "s2"
+  },
+  {
+   "src_in": 8.69,
+   "src_out": 9.41,
+   "out_start": 7.15,
+   "out_end": 7.87,
+   "segment": "s2"
+  },
+  {
+   "src_in": 9.65,
+   "src_out": 10.76,
+   "out_start": 7.87,
+   "out_end": 8.98,
+   "segment": "s2"
+  },
+  {
+   "src_in": 10.76,
+   "src_out": 13.33,
+   "out_start": 8.98,
+   "out_end": 11.55,
+   "segment": "g2"
+  },
+  {
+   "src_in": 13.53,
+   "src_out": 15.39,
+   "out_start": 11.55,
+   "out_end": 13.41,
+   "segment": "g2"
+  },
+  {
+   "src_in": 15.65,
+   "src_out": 16.84,
+   "out_start": 13.41,
+   "out_end": 14.6,
+   "segment": "s3"
+  },
+  {
+   "src_in": 17.45,
+   "src_out": 18.13,
+   "out_start": 14.6,
+   "out_end": 15.28,
+   "segment": "g3"
+  },
+  {
+   "src_in": 18.35,
+   "src_out": 19.82,
+   "out_start": 15.28,
+   "out_end": 16.75,
+   "segment": "g3"
+  },
+  {
+   "src_in": 20.02,
+   "src_out": 21.71,
+   "out_start": 16.75,
+   "out_end": 18.44,
+   "segment": "s4"
+  },
+  {
+   "src_in": 21.88,
+   "src_out": 23.52,
+   "out_start": 18.44,
+   "out_end": 20.08,
+   "segment": "s4"
+  },
+  {
+   "src_in": 23.52,
+   "src_out": 24.48,
+   "out_start": 20.08,
+   "out_end": 21.04,
+   "segment": "g4"
+  },
+  {
+   "src_in": 24.64,
+   "src_out": 26.94,
+   "out_start": 21.04,
+   "out_end": 23.34,
+   "segment": "g4"
+  },
+  {
+   "src_in": 27.15,
+   "src_out": 32.37,
+   "out_start": 23.34,
+   "out_end": 28.56,
+   "segment": "s5"
+  },
+  {
+   "src_in": 32.37,
+   "src_out": 35.15,
+   "out_start": 28.56,
+   "out_end": 31.34,
+   "segment": "g5"
+  }
+ ],
+ "removed": [
+  {
+   "src_in": 0.0,
+   "src_out": 0.1,
+   "duration": 0.1,
+   "why": "pause/dead air between segments"
+  },
+  {
+   "src_in": 3.11,
+   "src_out": 3.45,
+   "duration": 0.34,
+   "why": "internal pause trimmed (2–4 frames of room kept)"
+  },
+  {
+   "src_in": 4.77,
+   "src_out": 5.64,
+   "duration": 0.87,
+   "why": "pause/dead air between segments"
+  },
+  {
+   "src_in": 8.46,
+   "src_out": 8.69,
+   "duration": 0.23,
+   "why": "internal pause trimmed (2–4 frames of room kept)"
+  },
+  {
+   "src_in": 9.41,
+   "src_out": 9.65,
+   "duration": 0.24,
+   "why": "internal pause trimmed (2–4 frames of room kept)"
+  },
+  {
+   "src_in": 13.33,
+   "src_out": 13.53,
+   "duration": 0.2,
+   "why": "internal pause trimmed (2–4 frames of room kept)"
+  },
+  {
+   "src_in": 15.39,
+   "src_out": 15.65,
+   "duration": 0.26,
+   "why": "pause/dead air between segments"
+  },
+  {
+   "src_in": 16.84,
+   "src_out": 17.45,
+   "duration": 0.61,
+   "why": "pause/dead air between segments"
+  },
+  {
+   "src_in": 18.13,
+   "src_out": 18.35,
+   "duration": 0.22,
+   "why": "internal pause trimmed (2–4 frames of room kept)"
+  },
+  {
+   "src_in": 19.82,
+   "src_out": 20.02,
+   "duration": 0.2,
+   "why": "pause/dead air between segments"
+  },
+  {
+   "src_in": 21.71,
+   "src_out": 21.88,
+   "duration": 0.17,
+   "why": "internal pause trimmed (2–4 frames of room kept)"
+  },
+  {
+   "src_in": 24.48,
+   "src_out": 24.64,
+   "duration": 0.16,
+   "why": "internal pause trimmed (2–4 frames of room kept)"
+  },
+  {
+   "src_in": 26.94,
+   "src_out": 27.15,
+   "duration": 0.21,
+   "why": "pause/dead air between segments"
+  },
+  {
+   "src_in": 35.15,
+   "src_out": 35.133,
+   "duration": -0.017,
+   "why": "trailing fade-out/dead air"
+  }
+ ],
+ "opening": {
+  "still_source_time": 0.4,
+  "still_hold": 0.3,
+  "why": "the source fades in from black over 0–0.9 s while speech starts at 0.12 s; the first live frame is held so no dark frame is shown and sync is exact"
+ }
+}

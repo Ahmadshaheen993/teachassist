@@ -1,0 +1,101 @@
+<template>
+  <style>
+      @font-face { font-family: "Cairo"; font-style: normal; font-weight: 200 1000; font-display: block;
+        src: url("assets/fonts/cairo-arabic.woff2") format("woff2");
+        unicode-range: U+0600-06FF, U+0750-077F, U+0870-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
+      @font-face { font-family: "Cairo"; font-style: normal; font-weight: 200 1000; font-display: block;
+        src: url("assets/fonts/cairo-latin.woff2") format("woff2");
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+      @font-face { font-family: "Cairo"; font-style: normal; font-weight: 200 1000; font-display: block;
+        src: url("assets/fonts/cairo-latin-ext.woff2") format("woff2");
+        unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+
+      
+    #root { position: absolute; inset: 0; overflow: hidden; background: var(--paper, #E9E0D3);
+            font-family: "Cairo", sans-serif; direction: rtl; color: var(--ink, #1B1D1E); }
+    .ground { position: absolute; inset: 0; background: var(--paper, #E9E0D3); }
+    .vig { position: absolute; inset: 0; background: radial-gradient(ellipse 72% 62% at 50% 46%, rgba(212,200,184,0) 52%, rgba(212,200,184,0.6) 100%); }
+    .grain { position: absolute; inset: 0; opacity: 0.075; mix-blend-mode: multiply; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.3 0 0 0 0 0.25 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='256' height='256' filter='url(%23n)'/%3E%3C/svg%3E"); background-size: 256px 256px; }
+    .t { position: absolute; left: 80px; right: 80px; text-align: center; direction: rtl; unicode-bidi: isolate; white-space: nowrap; line-height: 1.15; }
+    .row { display: flex; flex-direction: row; justify-content: center; align-items: baseline; gap: 0.28em; }
+    .w { display: inline-block; will-change: transform, opacity, filter; }
+    .ctx { font-weight: 600; font-size: 46px; color: var(--ink-soft, #3A3D3E); }
+    .sub { font-weight: 700; font-size: 64px; color: var(--ink-soft, #3A3D3E); }
+    .hero { font-weight: 900; color: var(--ink, #1B1D1E); letter-spacing: -0.01em; }
+    .warm { color: var(--accent-warm-dark, #C85218); }
+    svg { position: absolute; overflow: visible; }
+    .ink { stroke: var(--ink, #1B1D1E); fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    path[pathLength], rect[pathLength] { stroke-dasharray: 1; stroke-dashoffset: 1; }
+    .warm-fill { fill: var(--accent-warm, #E66A21); }
+
+    #m-neg { top: 290px; font-weight: 900; font-size: 112px; color: var(--accent-warm-dark, #C85218); line-height: 1.1; }
+    #m-hero { top: 420px; font-size: 212px; line-height: 1.05; }
+    #m-sub { top: 700px; font-weight: 800; font-size: 92px; color: var(--ink-soft, #3A3D3E); }
+    #m-bottom { top: 1490px; font-weight: 700; font-size: 62px; color: var(--ink-soft, #3A3D3E); }
+    #m-route text { font-family: "Cairo", sans-serif; font-weight: 800; font-size: 50px; fill: var(--ink, #1B1D1E); text-anchor: middle; dominant-baseline: central; }
+    #m-route .node circle { fill: var(--paper-light, #F6F0E7); }
+
+  </style>
+  <div data-hf-id="hf-xh5o" id="root" data-composition-id="method" data-width="1080" data-height="1920" dir="rtl" lang="ar">
+    <div data-hf-id="hf-ygft" class="ground"></div>
+    <div data-hf-id="hf-e4a6" class="vig"></div>
+
+    <div data-hf-id="hf-xsuq" id="m-neg" class="t row"><span data-hf-id="hf-n92k" class="w" id="m-la">لا</span><span data-hf-id="hf-44lw" class="w" id="m-yujad">يوجد</span></div>
+    <div data-hf-id="hf-5790" id="m-hero" class="t"><span data-hf-id="hf-0y4w" class="w hero" id="m-manhaj">منهجية</span></div>
+    <div data-hf-id="hf-rn16" id="m-sub" class="t"><span data-hf-id="hf-hxd8" class="w" id="m-haq">حقيقية</span></div>
+    <svg data-hf-id="hf-5zkk" id="m-route" width="1080" height="600" viewBox="0 0 1080 600" style="top: 860px; left: 0">
+      <path data-hf-id="hf-dnlh" id="m-l1" class="ink" d="M 846 470 C 800 420, 760 380, 734 342" stroke-width="6" pathLength="1" />
+      <path data-hf-id="hf-bfke" id="m-l2" class="ink" d="M 626 322 C 580 340, 540 370, 512 396" stroke-width="6" pathLength="1" />
+      <path data-hf-id="hf-usim" id="m-l3" class="ink" d="M 406 388 C 380 360, 362 330, 352 300" stroke-width="6" pathLength="1" />
+      <path data-hf-id="hf-o74l" id="m-stub" class="ink" d="M 352 300 c -10 -28 -8 -54 -4 -70" stroke-width="3" pathLength="1" />
+      <path data-hf-id="hf-y2oh" id="m-scribble" class="ink" d="M 330 232 c 18 -26 42 -4 20 16 c -22 20 -38 -16 -10 -28 c 24 -10 46 20 14 34 c -30 12 -52 -22 -16 -36" stroke-width="5" pathLength="1" />
+      <g data-hf-id="hf-1g6l" id="m-n1" class="node"><circle data-hf-id="hf-nrqc" cx="900" cy="500" r="54" class="ink" stroke-width="6" /><text data-hf-id="hf-u0vj" x="900" y="500">١</text></g>
+      <g data-hf-id="hf-5eam" id="m-n2" class="node"><circle data-hf-id="hf-o7cl" cx="680" cy="320" r="54" class="ink" stroke-width="6" /><text data-hf-id="hf-gjkf" x="680" y="320">٢</text></g>
+      <g data-hf-id="hf-9cen" id="m-n3" class="node"><circle data-hf-id="hf-sxv2" cx="460" cy="420" r="54" class="ink" stroke-width="6" /><text data-hf-id="hf-yf1x" x="460" y="420">٣</text></g>
+      <g data-hf-id="hf-daio" id="m-n4" class="node"><circle data-hf-id="hf-miz1" cx="230" cy="170" r="54" class="ink" stroke-width="5" stroke-dasharray="14 12" /><text data-hf-id="hf-3pug" x="230" y="170">؟</text></g>
+    </svg>
+    <div data-hf-id="hf-kcbl" id="m-bottom" class="t row"><span data-hf-id="hf-zvwg" class="w" id="m-b1">في</span><span data-hf-id="hf-ekxi" class="w" id="m-b2">تعلم</span><span data-hf-id="hf-7kzj" class="w" id="m-b3">اللغة</span><span data-hf-id="hf-rh7c" class="w" id="m-b4">العربية</span></div>
+
+    <div data-hf-id="hf-ryn8" class="grain" data-layout-ignore></div>
+  </div>
+  <script>
+    (function () {
+      "use strict";
+      var tl = gsap.timeline({ paused: true });
+      function rise(tl, targets, at, stagger, dur) {
+        tl.fromTo(targets, { opacity: 0, y: 26, filter: "blur(6px)" },
+          { opacity: 1, y: 0, filter: "blur(0px)", duration: dur || 0.3, ease: "expo.out", stagger: stagger || 0 }, at);
+      }
+      function stamp(tl, target, at, rot) {
+        tl.fromTo(target, { opacity: 0, scale: 1.12, rotation: rot || 0, filter: "blur(5px)" },
+          { opacity: 1, scale: 1, rotation: 0, filter: "blur(0px)", duration: 0.2333, ease: "power4.out" }, at);
+      }
+      function draw(tl, path, at, dur, ease) {   // every path carries pathLength="1"
+        tl.fromTo(path, { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: dur, ease: ease || "power2.inOut" }, at);
+      }
+      function pop(tl, target, at) {
+        tl.fromTo(target, { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.2, ease: "back.out(1.4)" }, at);
+      }
+
+
+      // cues: لا 0.00 · يوجد 0.26 · منهجية 0.68 · حقيقية 1.26 · في 2.36 · تعلم 2.65 · اللغة 3.14 · العربية 3.72 · cut 4.43
+      gsap.set(["#m-n1", "#m-n2", "#m-n3", "#m-n4"], { opacity: 0, transformOrigin: "50% 50%" });
+      stamp(tl, "#m-la", 0.0);  stamp(tl, "#m-yujad", 0.26);
+      pop(tl, "#m-n1", 0.10);
+      draw(tl, "#m-l1", 0.26, 0.36);
+      pop(tl, "#m-n2", 0.52);
+      stamp(tl, "#m-manhaj", 0.68);
+      draw(tl, "#m-l2", 0.74, 0.34);
+      pop(tl, "#m-n3", 0.98);
+      rise(tl, "#m-haq", 1.26);
+      draw(tl, "#m-l3", 1.26, 0.22, "power1.in");          // the third link starts…
+      draw(tl, "#m-stub", 1.44, 0.16, "power1.out");       // …thins to a dashed stub…
+      draw(tl, "#m-scribble", 1.52, 0.30, "power2.out");   // …and knots up: no real method
+      tl.fromTo("#m-n4", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.25, ease: "power2.out" }, 1.74);
+      rise(tl, "#m-b1", 2.36);  rise(tl, "#m-b2", 2.65);  rise(tl, "#m-b3", 3.14);  rise(tl, "#m-b4", 3.72);
+
+      tl.seek(0);
+      window.__timelines["method"] = tl;
+    })();
+  </script>
+</template>
