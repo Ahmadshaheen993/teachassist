@@ -34,7 +34,8 @@ promise (simplify the subject) and the result (a student fluent in the Arabic of
 - **Audio**: the original dialogue is the only audio (−13.6 LUFS, −1.2 dBTP measured; noise floor ≈ −60 dBFS,
   so no denoise). Three bundled, licence-free SFX (Pixabay Content License) sit far below the voice on graphic
   cuts and hero-word landings. No music.
-- **Ratio**: 49.8 % talking head / 50.2 % graphic interludes (15.62 s / 15.72 s of 31.34 s).
+- **Ratio**: 49.9 % talking head / 50.1 % graphic interludes (15.60 s / 15.67 s of 31.27 s, 938 frames). Every cut and
+  every source in-point sits on the 30 fps grid, so the frame extractor and the sample-accurate audio map identically.
 
 ## Deliverables
 `index.html` + `compositions/`, `assets/`, `scripts/` (plan → transcript/timing/captions; build → root + captions;

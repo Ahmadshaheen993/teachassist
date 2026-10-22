@@ -53,8 +53,8 @@ SEG = [
 OPEN_HOLD = 0.30          # s1: still frame shown for this long before the live picture
 OPEN_STILL_SRC = 0.40     # source time of the held frame
 
-def q(x):  # quantise to the frame grid
-    return round(round(x*FPS)/FPS, 4)
+def q(x):  # quantise to the frame grid (full precision: the runtime floors frame indices)
+    return round(x*FPS)/FPS
 
 # ---- build retained ranges and the source->output map
 ranges = []   # (src_a, src_b, out_a, seg_id)
@@ -64,23 +64,27 @@ prev_src_end = 0.0
 for s in SEG:
     if s["src_in"] > prev_src_end + 1e-6:
         removed.append((round(prev_src_end,3), s["src_in"], "pause/dead air between segments"))
-    cursor = s["src_in"]
-    pieces = []
+    cursor = q(s["src_in"])             # source in-points sit on the plate's frame grid too, so every
+    pieces = []                          # media offset names one exact plate frame
     for (a,b) in s["trims"]:
+        a, b = q(a), q(b)
         pieces.append((cursor,a)); removed.append((a,b,"internal pause trimmed (2–4 frames of room kept)")); cursor = b
-    pieces.append((cursor, s["src_out"]))
-    s["out_start"] = round(t_out,4)
+    pieces.append((cursor, q(s["src_out"])))
+    s["src_in"] = pieces[0][0]
+    s["out_start"] = round(q(t_out),6)
     s["pieces"] = []
     for (a,b) in pieces:
-        d = b - a
-        ranges.append((a,b,round(t_out,4),s["id"]))
-        s["pieces"].append(dict(src_in=a, src_out=b, out_start=round(t_out,4), out_end=round(t_out+d,4), duration=round(d,4)))
-        t_out += d
-    s["out_end"] = round(t_out,4)
-    s["duration"] = round(s["out_end"]-s["out_start"],4)
+        d = q(b - a)                      # whole frames: every clip start and length sits on the 30 fps grid,
+        b = a + d                         # so the frame extractor and the sample-accurate audio map identically
+        ranges.append((round(a,6),round(b,6),round(q(t_out),6),s["id"]))
+        s["pieces"].append(dict(src_in=round(a,6), src_out=round(b,6), out_start=round(q(t_out),6), out_end=round(q(t_out+d),6), duration=round(d,6)))
+        t_out = q(t_out + d)
+    s["src_out"] = s["pieces"][-1]["src_out"]
+    s["out_end"] = round(q(t_out),6)
+    s["duration"] = round(s["out_end"]-s["out_start"],6)
     prev_src_end = s["src_out"]
 removed.append((SEG[-1]["src_out"], SRC_DURATION, "trailing fade-out/dead air"))
-TOTAL = round(t_out, 4)
+TOTAL = round(t_out, 6)
 
 def src_to_out(t):
     for (a,b,oa,_) in ranges:

@@ -6,7 +6,14 @@ import json, os
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 P = json.load(open(os.path.join(ROOT, "plan.json"), encoding="utf-8"))
 FPS = P["fps"]; TOTAL = P["total"]; SEG = P["segments"]; S = {s["id"]: s for s in SEG}
-def f(x): return f"{x:.4f}".rstrip("0").rstrip(".")
+import math
+# Times are written FLOORED at 1 µs. The frame extractor indexes cached frames with floor((t - start) * fps); a start rounded
+# a hair above its grid value makes every later frame of the clip land one frame early. Floored starts keep (t - start) * fps
+# at k + ε, so render frame k shows source frame k.
+def f(x): return f"{math.floor(round(x*FPS)/FPS*1e6+1e-7)/1e6:.6f}".rstrip("0").rstrip(".")   # snap to the grid, then floor
+def fd(x): return f"{math.floor(round(x*FPS)/FPS*1e6)/1e6:.6f}".rstrip("0").rstrip(".")   # grid length floored at 1 µs so abutting clips never overlap
+HALF = 1/60   # picture clips seek to the middle of the intended source frame: a seek exactly on a frame boundary lands on the previous frame
+def fm(x): return f"{math.floor(x*1e6+1e-7)/1e6:.6f}".rstrip("0").rstrip(".")   # media offsets: floor only, never snapped (they carry the half-frame nudge)
 
 FONT_FACE = """
       @font-face { font-family: "Cairo"; font-style: normal; font-weight: 200 1000; font-display: block;
@@ -32,12 +39,12 @@ for s in SEG:
         cid = f"{s['id']}{suffix}"
         if s["id"] == "s1":
             # held clean frame (source fade-in), then the live picture in exact sync
-            aroll_html.append(f'''      <div class="cam" id="cam-{cid}s"><img id="a-{cid}s" class="clip" src="assets/open-still.png" alt="" data-start="0" data-duration="{f(still_hold)}" data-track-index="0" style="z-index:{z}" /></div>''')
+            aroll_html.append(f'''      <div class="cam" id="cam-{cid}s"><img id="a-{cid}s" class="clip" src="assets/open-still.png" alt="" data-start="0" data-duration="{fd(still_hold)}" data-track-index="0" style="z-index:{z}" /></div>''')
             cams.append((f"cam-{cid}s", 0.0, still_hold)); z += 1
-            aroll_html.append(f'''      <div class="cam" id="cam-{cid}"><video id="a-{cid}" class="clip" src="assets/aroll.mp4" muted playsinline data-start="{f(still_hold)}" data-duration="{f(pc['duration']-still_hold)}" data-media-start="{f(pc['src_in']+still_hold)}" data-track-index="0" style="z-index:{z}"></video></div>''')
+            aroll_html.append(f'''      <div class="cam" id="cam-{cid}"><video id="a-{cid}" class="clip" src="assets/aroll.mp4" muted playsinline data-start="{f(still_hold)}" data-duration="{fd(pc['duration']-still_hold)}" data-media-start="{fm(pc['src_in']+still_hold+HALF)}" data-track-index="0" style="z-index:{z}"></video></div>''')
             cams.append((f"cam-{cid}", still_hold, pc["out_end"])); z += 1
         else:
-            aroll_html.append(f'''      <div class="cam" id="cam-{cid}"><video id="a-{cid}" class="clip" src="assets/aroll.mp4" muted playsinline data-start="{f(pc['out_start'])}" data-duration="{f(pc['duration'])}" data-media-start="{f(pc['src_in'])}" data-track-index="0" style="z-index:{z}"></video></div>''')
+            aroll_html.append(f'''      <div class="cam" id="cam-{cid}"><video id="a-{cid}" class="clip" src="assets/aroll.mp4" muted playsinline data-start="{f(pc['out_start'])}" data-duration="{fd(pc['duration'])}" data-media-start="{fm(pc['src_in']+HALF)}" data-track-index="0" style="z-index:{z}"></video></div>''')
             cams.append((f"cam-{cid}", pc["out_start"], pc["out_end"])); z += 1
 
 # ---------------- dialogue (track 1): one clip per retained source range ----------------
@@ -47,18 +54,18 @@ AUDIO_END = 34.80
 for s in SEG:
     for pc in s["pieces"]:
         n += 1
-        src_out = min(pc["src_out"], AUDIO_END)
-        dur = src_out - pc["src_in"]
+        # identical length to the picture piece (same grid); only the last clip is capped at the end of speech
+        dur = pc["duration"] if pc["src_out"] <= AUDIO_END else round(AUDIO_END - pc["src_in"], 6)
         if dur <= 0: continue
         fade_out = ' data-fade-out="0.15"' if s["id"] == "g5" else ""
-        dialogue_html.append(f'''      <audio id="d{n}" class="clip" src="assets/audio/dialogue.wav" data-start="{f(pc['out_start'])}" data-duration="{f(dur)}" data-media-start="{f(pc['src_in'])}" data-volume="0.92" data-track-index="1" data-audio-group="voice"{fade_out}></audio>''')
+        dialogue_html.append(f'''      <audio id="d{n}" class="clip" src="assets/audio/dialogue.wav" data-start="{f(pc['out_start'])}" data-duration="{fd(dur)}" data-media-start="{fm(pc['src_in'])}" data-volume="0.92" data-track-index="1" data-audio-group="voice"{fade_out}></audio>''')
 
 # ---------------- graphic scene hosts (track 2) ----------------
 hosts_html = []
 for s in SEG:
     if s["kind"] != "graphic": continue
     sc = s["scene"]
-    hosts_html.append(f'''      <div id="{sc}" class="clip" data-composition-id="{sc}" data-composition-src="compositions/{sc}.html" data-start="{f(s['out_start'])}" data-duration="{f(s['duration'])}" data-track-index="2" data-track-kind="graphics" data-width="1080" data-height="1920" style="z-index:20"></div>''')
+    hosts_html.append(f'''      <div id="{sc}" class="clip" data-composition-id="{sc}" data-composition-src="compositions/{sc}.html" data-start="{f(s['out_start'])}" data-duration="{fd(s['duration'])}" data-track-index="2" data-track-kind="graphics" data-width="1080" data-height="1920" style="z-index:20"></div>''')
 
 # ---------------- SFX (track 4) ----------------
 W = {w["id"]: w for w in P["words"]}

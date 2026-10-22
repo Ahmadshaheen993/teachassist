@@ -44,7 +44,7 @@ background; static camera. Delivery canvas 1080 × 1920 is reached by a 2.33× L
 | 32.20–32.45 | 0.25 | kept (the cut to the final card sits in it) |
 | 34.65–35.13 | 0.48 | trailing: removed (card holds over it) |
 
-Total removed: 3.79 s. Edited length 31.34 s (940 frames).
+Total removed: 3.85 s (after snapping every cut and in-point to the 30 fps grid). Edited length 31.27 s (938 frames).
 
 ## Transcript verification
 Engine: faster-whisper **large-v3** (int8, CPU), `language=ar`, word timestamps, beam 5; language probability 1.00;

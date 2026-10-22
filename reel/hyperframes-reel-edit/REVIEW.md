@@ -17,7 +17,7 @@
   as a cut-out inside cards. (a) under-delivers the brief's ratio, (b) needs a matte the brief did not ask for.
 
 ## What was measured, what was only looked at
-- Measured: `hyperframes check` (lint, runtime, layout, motion, contrast) → 0 errors; silence map (−42 dBFS envelope);
+- Measured: `hyperframes check` (lint, runtime, layout, motion, contrast) → 0 errors, 0 lint warnings; silence map (−42 dBFS envelope);
   transcript probabilities (≥ 0.74, most 1.00) and two-temperature re-checks of five uncertain stretches; per-frame luma of
   the source fade and of the compensated plate (flat at YAVG ≈ 98 from 0.10 s); loudness of the draft render
   (−14.3 LUFS integrated, −2.2 dBTP); font: `document.fonts.check("900 100px Cairo")` true, Cairo FontFace status
@@ -41,5 +41,15 @@
   files under `assets/`.
 
 ## Plan vs cut
-`STORYBOARD.md` frontmatter says 31.34 s; the cut lands at 31.34 s (940 frames). A-roll 15.62 s (49.8 %), editorial
-graphics 15.72 s (50.2 %). Removed from the source: 3.79 s of pauses and dead air (`timing-map.json`).
+`STORYBOARD.md` frontmatter says 31.27 s; the cut lands at 31.27 s (938 frames). A-roll 15.60 s (49.9 %), editorial
+graphics 15.67 s (50.1 %). Removed from the source: 3.85 s of pauses and dead air (`timing-map.json`).
+
+## Sync (measured on the draft render, `renders/preview_draft.mp4`)
+- Dialogue: cross-correlation of every retained range against the source gives |lag| ≤ 0.33 ms (sample-level).
+- Picture: rendered frames of the scale-1.00 presenter segment (S3, 35 frames) were matched against the plate by PSNR;
+  every discriminative frame (13 of 35 with ≥ 3 dB margin) matches exactly the intended plate frame (offset 0).
+- What it took: the frame extractor indexes its cached frames with floor((t − start) × fps). A clip start written a hair
+  above its grid value (13.366667 for frame 401) made every later frame of that clip show the previous source frame
+  (measured −1). Starts and lengths are therefore snapped to the 30 fps grid and written floored at 1 µs, and picture
+  clips seek to the centre of the intended source frame (`data-media-start` = source in-point + 1/60 s); the dialogue
+  clips keep the exact in-point. `scripts/build.py` documents this.
